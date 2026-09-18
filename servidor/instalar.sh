@@ -102,6 +102,38 @@ if [ -z "$SENHA" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 2b. O token do GitHub — sem ele o Zeus conversa mas nao TRABALHA
+# ---------------------------------------------------------------------------
+# E com ele que o Zeus abre Pull Request. Ele nunca junta na main: quem aprova
+# e o Paulo. Por isso o token pode (e deve) ser estreito.
+#
+# Como criar, em github.com > Settings > Developer settings >
+# Personal access tokens > Fine-grained tokens:
+#   Repository access: SOMENTE moviki, moviki-app, moviki-ai e
+#                      moviki-assistente-social
+#   Permissoes:        Contents = Read and write
+#                      Pull requests = Read and write
+#   Nada de administracao, nada de workflows, nada dos outros repositorios.
+GHTOKEN=""
+if [ -f "$ENV_ARQ" ]; then
+  GHTOKEN="$(grep -E '^ZEUS_GITHUB_TOKEN=' "$ENV_ARQ" | cut -d= -f2- || true)"
+fi
+
+if [ -n "$GHTOKEN" ]; then
+  echo "Ja existe um token do GitHub guardado."
+  read -r -p "Trocar por outro? (s/N) " TROCAR_GH
+  if [[ "${TROCAR_GH,,}" == "s" ]]; then GHTOKEN=""; fi
+fi
+
+if [ -z "$GHTOKEN" ]; then
+  echo
+  echo "Cole o token do GitHub para o Zeus abrir Pull Request."
+  echo "Deixe VAZIO e aperte Enter para ele so conversar, sem trabalhar:"
+  read -r -s GHTOKEN
+  echo
+fi
+
+# ---------------------------------------------------------------------------
 # 3. Grava o ambiente
 # ---------------------------------------------------------------------------
 mkdir -p "$ENV_DIR"
@@ -116,6 +148,9 @@ ZEUS_SENHA=$SENHA
 # Olhos: le o mapa mestre e o estado dos repositorios. So abrem com a senha
 # acima configurada — sem ela o servidor atende de olhos fechados.
 ZEUS_OLHOS=1
+
+# Maos: sem este token ele conversa mas nao abre Pull Request.
+ZEUS_GITHUB_TOKEN=$GHTOKEN
 
 # Teto de falas por dia. Porta na internet nao tem fundo: se o endereco
 # vazar, a conta para aqui em vez de crescer a noite inteira.

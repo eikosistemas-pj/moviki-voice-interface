@@ -17,28 +17,30 @@
 //
 // ENV (na VPS, nunca em arquivo):
 //   ANTHROPIC_API_KEY   chave da API
-//   ZEUS_TOKEN          senha simples que a tela manda junto  (ver abaixo)
+//   ZEUS_SENHA          a tranca. Sem ela, os olhos nao abrem
+//   ZEUS_GITHUB_TOKEN   sem ele o Zeus conversa mas nao trabalha
 //   ZEUS_LIMITE_DIA     opcional. Padrao 200 falas por dia.
 //   ZEUS_PORTA          opcional. Padrao 8124.
 //   ZEUS_ESTADO         opcional. Onde guardar a memoria. Padrao ./dados/
 //   ZEUS_MODELO         opcional. Ver servidor/cerebro.js.
 //
-// SOBRE O ZEUS_TOKEN — leia antes de confiar nele
-// Ele barra quem passa na rua, nao quem quer entrar. A tela e publica, entao
-// o token viaja para o navegador e quem abrir o codigo da pagina consegue
-// ler. Serve para o endereco nao ser um brinquedo aberto na internet; NAO
-// serve de seguranca de verdade.
-// A protecao que vale e o teto diario abaixo: mesmo que o token vaze, a conta
-// para no limite em vez de crescer a noite inteira. Para fechar de verdade, o
-// caminho e senha no Nginx ou liberar so o seu IP.
+// AS TRES COISAS QUE ELE FAZ, E EM QUE ORDEM
+//   1. abre e fecha o turno          (frase falada, conferida pela trava)
+//   2. trabalha                      (ordem com verbo de mudanca -> Pull Request)
+//   3. conversa                      (todo o resto -> cerebro)
+//
+// Trabalho corre POR FORA da conversa: ler codigo leva minutos e o Paulo esta
+// parado na frente da tela esperando uma voz.
 
 import http from 'node:http'
 import { decidir, PEDIDOS } from '../lib/turno.js'
-import { entender } from './comando.js'
+import { entender, pareceTrabalho, repoDoAssunto } from './comando.js'
 import { montarSystem, pensar } from './cerebro.js'
 import * as estado from './estado.js'
 import * as olhos from './olhos.js'
 import { criarPorta } from './porta.js'
+import { executarProposta } from './oficina.js'
+import { montarProposta } from './trabalho.js'
 
 const PORTA = Number(process.env.ZEUS_PORTA || 8124)
 const LIMITE_DIA = Number(process.env.ZEUS_LIMITE_DIA || 200)
@@ -95,6 +97,9 @@ const FALAS = {
   assuntoDoPaulo: 'Isso e seu, nao meu. Nao mexo nisso nem no seu turno.',
   semTurno: 'Isso e decisao sua, e voce esta aqui. Me diga o que fazer.',
   naoPrevisto: 'Nao sei fazer isso e nao vou inventar. Deixei anotado.',
+  vouTrabalhar: 'Vou trabalhar nisso. Te conto quando terminar.',
+  semOficina: 'Ainda nao tenho acesso para mexer no codigo. Falta o token do GitHub aqui na maquina.',
+  ondeMexer: 'Nao entendi em qual parte do Moviki e para mexer. Me diga o painel, o site, o atendente ou as redes.',
 }
 
 function responderJSON(res, codigo, corpo) {
@@ -236,12 +241,62 @@ async function tratarFala(req, res) {
     return responderJSON(res, 200, { resposta: FALAS.teto, turno: atual.turno })
   }
 
+  // --- Ordem de mexer no codigo -------------------------------------------
+  //
+  // So entra aqui quem tem VERBO DE MUDANCA. "Como esta o painel?" e conversa
+  // e segue para o cerebro; "muda o texto do painel" e trabalho.
+  //
+  // O trabalho corre POR FORA: ler o codigo e montar a alteracao leva minutos,
+  // e o Paulo esta parado na frente da tela esperando uma voz. Ele ouve "vou
+  // trabalhar nisso" na hora, e o resultado e contado quando ele falar de novo.
+  if (pareceTrabalho(falado)) {
+    const repo = repoDoAssunto(falado)
+    if (!repo) {
+      return responderJSON(res, 200, { resposta: FALAS.ondeMexer, turno: atual.turno })
+    }
+    if (!process.env.ZEUS_GITHUB_TOKEN) {
+      return responderJSON(res, 200, { resposta: FALAS.semOficina, turno: atual.turno })
+    }
+
+    const id = estado.abrirTarefa(atual, { ordem: falado, repo })
+    estado.anotar(atual, { o: 'trabalho', resumo: `comecei: ${falado.slice(0, 100)}` })
+    estado.gravar(atual)
+
+    // De proposito sem `await`: a resposta sai agora. O `.then` grava o
+    // resultado quando chegar, lendo o estado DE NOVO — entre o inicio e o
+    // fim o Paulo pode ter falado outras coisas, e gravar por cima da copia
+    // velha apagaria a conversa dele.
+    montarProposta({ repo, ordem: falado })
+      .then(async (r) => {
+        if (!r.ok) return { ok: false, erros: r.erros }
+        return executarProposta(r.proposta)
+      })
+      .then((r) => {
+        const agora = estado.ler()
+        estado.fecharTarefa(agora, id, r)
+        estado.anotar(agora, {
+          o: 'trabalho',
+          resumo: r.ok ? `abri um Pull Request: ${r.link}` : `nao deu: ${(r.erros || []).join('; ')}`,
+        })
+        estado.gravar(agora)
+      })
+      .catch((e) => {
+        const agora = estado.ler()
+        estado.fecharTarefa(agora, id, { ok: false, erros: [String(e?.message || e)] })
+        estado.gravar(agora)
+      })
+
+    return responderJSON(res, 200, { resposta: FALAS.vouTrabalhar, turno: atual.turno })
+  }
+
   const visao = OLHOS_LIGADOS ? olhos.ultimoRetrato() : {}
+  const pendentes = estado.tarefasParaContar(atual)
   const resposta = await pensar({
     system: montarSystem({
       turnoAberto: atual.turno?.aberto === true,
       mapa: visao.mapa,
       retrato: visao.retrato,
+      tarefas: pendentes,
     }),
     historico: atual.conversa,
     falaNova: falado,
@@ -252,6 +307,9 @@ async function tratarFala(req, res) {
   }
 
   estado.contarChamada(atual)
+  // Marcadas so DEPOIS de a resposta existir: se a chamada falhasse antes,
+  // o Zeus daria o trabalho por contado sem ter aberto a boca.
+  if (pendentes.length) estado.marcarContadas(atual)
   estado.lembrarFala(atual, 'paulo', falado)
   estado.lembrarFala(atual, 'zeus', resposta)
   if (atual.turno?.aberto) {

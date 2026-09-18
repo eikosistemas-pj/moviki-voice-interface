@@ -42,6 +42,9 @@ Nunca em arquivo dentro do repositório. Na VPS, como variável de ambiente
 | `ZEUS_SENHA` | **a tranca.** Sem ela o Zeus atende de olhos fechados |
 | `ZEUS_OLHOS` | `1` (padrão) lê o mapa e os repositórios. `0` desliga |
 | `ZEUS_ESPELHO` | onde ficam os espelhos. Padrão `/root/eikosistemas` |
+| `ZEUS_GITHUB_TOKEN` | **as mãos.** Sem ele o Zeus conversa mas não trabalha |
+| `ZEUS_OFICINA` | onde ele monta o trabalho. Padrão `/root/eikosistemas/.oficina` |
+| `ZEUS_MAX_VOLTAS` | quantas leituras antes de desistir. Padrão 12 |
 
 ### Sobre o `ZEUS_CONFERE_VOZ`
 
@@ -145,6 +148,50 @@ regra de origem segura, não defeito.
 Deve responder `{"ok":true}`. Esse é o único endereço que responde sem crachá,
 e de propósito ele não conta nada: saber que o turno está **aberto** é saber
 que o Paulo não está olhando.
+
+### As mãos (`ZEUS_GITHUB_TOKEN`)
+
+**O Zeus propõe, nunca publica.** Ele trabalha num ramo `zeus/…` e abre Pull
+Request; quem junta na main é o Paulo. A regra de ouro número 1 do Moviki é
+nunca fazer push direto na main, porque o Vercel publica a main na hora para
+os clientes — e um robô não é exceção.
+
+O pior caso de um erro dele passa a ser **um Pull Request ruim esperando
+aprovação**, não um site fora do ar.
+
+**Onde ele pode encostar:** `moviki`, `moviki-app`, `moviki-ai` e
+`moviki-assistente-social`.
+
+Fora de alcance: **`moviki-robo`**, que é o robô do dinheiro — o mapa mestre
+diz que ele muda o mínimo possível, de propósito. E **`moviki-voice-interface`**,
+que é o próprio Zeus: ele não mexe em si mesmo nem na trava que o segura.
+
+Mesmo nos permitidos, nunca: regras do Firestore e do Storage, `.github/`,
+qualquer `.env`, `vercel.json`, o `CLAUDE.md` e o `package-lock.json`. Cada uma
+dessas é uma porta que, aberta, deixaria contornar as outras travas sem
+quebrar nenhuma.
+
+**Como criar o token** (github.com → Settings → Developer settings → Personal
+access tokens → Fine-grained):
+
+- **Repository access:** somente os quatro repositórios acima
+- **Contents:** Read and write
+- **Pull requests:** Read and write
+- Nada de administração, nada de workflows, nada dos outros repositórios
+
+Sem o token o Zeus continua conversando; ele só avisa que não tem acesso para
+mexer no código.
+
+**Como o trabalho corre:** ler o código leva minutos e o Paulo está parado na
+frente da tela esperando uma voz. Então ele diz "vou trabalhar nisso" na hora,
+o trabalho corre por fora, e o resultado é contado na próxima vez que o Paulo
+falar. Sem isso, ou o Paulo ouvia silêncio por dois minutos, ou descobria o
+Pull Request dias depois sem lembrar de ter pedido.
+
+**Como ele sabe onde mexer:** pelo que o Paulo fala. "O painel do lojista" é
+`moviki-app`, "o site" é `moviki`, "o atendente" é `moviki-ai`, "o Instagram" é
+`moviki-assistente-social`. Se não der para saber, ele pergunta em vez de
+chutar.
 
 ## O botão de pânico
 

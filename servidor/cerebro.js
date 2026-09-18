@@ -86,16 +86,21 @@ NA DUVIDA VOCE PARA. Robo que trava e aborrecimento; robo que decide errado
 no lugar do dono e prejuizo. Se faltar informacao, pergunte ou diga que vai
 deixar anotado.
 
-NAO INVENTE ESTADO. Voce ainda nao enxerga os repositorios em tempo real. Se
-ele perguntar algo que depende de olhar o codigo ou um Pull Request agora,
-diga com todas as letras que ainda nao esta ligado nisso, em vez de chutar um
-numero ou um status.
-
 VOCE TEM OLHOS, MAS NAO ADIVINHA. A cada conversa voce recebe o mapa oficial
 do projeto e o estado real dos repositorios, lido do codigo. Use como fato. O
 que nao estiver ali voce NAO sabe — e "nao estou ligado nisso" e melhor
 resposta que um numero inventado. Chute com voz de comando vira decisao
-errada do Paulo.`
+errada do Paulo.
+
+VOCE SO ENXERGA O CODIGO. Numero de negocio — quantos lojistas, faturamento,
+assinaturas, pedidos — mora no Firestore, e voce ainda nao alcanca. Perguntado
+sobre numero assim, diga que ainda nao esta ligado nisso.
+
+VOCE TAMBEM TRABALHA. Quando o Paulo manda MEXER em alguma coisa (mudar,
+ajustar, corrigir, acrescentar), voce le o codigo e abre um Pull Request para
+ele aprovar. Voce nunca junta na main — o Vercel publica a main na hora para
+os clientes, e isso e do Paulo. Trabalho leva minutos e corre por fora da
+conversa: voce avisa que comecou e conta o resultado quando ele falar de novo.`
 }
 
 /**
@@ -107,23 +112,40 @@ errada do Paulo.`
  * muda de quinze em quinze minutos e fica de fora. Misturar os dois faria o
  * mapa inteiro ser cobrado cheio a cada frase — e o mapa e grande.
  */
-export function montarMomento({ turnoAberto, retrato }) {
+export function montarMomento({ turnoAberto, retrato, tarefas }) {
   const turno = turnoAberto
     ? 'ABERTO — o Paulo saiu e passou o posto para voce. Pode decidir dentro da cerca, e vai prestar contas quando ele chegar.'
     : 'FECHADO — o Paulo esta aqui. Voce executa o que ele mandar e nao decide nada no lugar dele.'
 
-  return [
-    `TURNO AGORA: ${turno}`,
-    '',
-    retrato || '(ainda nao olhei os repositorios; nao afirme nada sobre o estado do codigo)',
-  ].join('\n')
+  const partes = [`TURNO AGORA: ${turno}`, '']
+
+  // O trabalho corre por fora da conversa e termina sozinho. Se o Zeus nao
+  // contar na primeira oportunidade, o Paulo descobre o Pull Request dias
+  // depois, sem lembrar de ter pedido.
+  if (tarefas?.length) {
+    partes.push('TRABALHO QUE VOCE TERMINOU E AINDA NAO CONTOU AO PAULO —')
+    partes.push('comece a resposta por isso, em uma frase, antes de responder o resto:')
+    for (const t of tarefas) {
+      partes.push(
+        t.ok
+          ? `  "${t.ordem}" — pronto, abri um Pull Request: ${t.link}`
+          : `  "${t.ordem}" — nao deu: ${(t.erros || []).join('; ')}`
+      )
+    }
+    partes.push('')
+  }
+
+  partes.push(
+    retrato || '(ainda nao olhei os repositorios; nao afirme nada sobre o estado do codigo)'
+  )
+  return partes.join('\n')
 }
 
 /**
  * Monta o `system` em blocos. O primeiro (persona + mapa) leva a marca de
  * cache: tudo ate ela e cobrado barato a partir da segunda vez.
  */
-export function montarSystem({ turnoAberto, mapa, retrato }) {
+export function montarSystem({ turnoAberto, mapa, retrato, tarefas }) {
   const fixo = [montarPersona()]
   if (mapa) {
     fixo.push(
@@ -138,7 +160,7 @@ export function montarSystem({ turnoAberto, mapa, retrato }) {
 
   return [
     { type: 'text', text: fixo.join('\n'), cache_control: { type: 'ephemeral' } },
-    { type: 'text', text: montarMomento({ turnoAberto, retrato }) },
+    { type: 'text', text: montarMomento({ turnoAberto, retrato, tarefas }) },
   ]
 }
 

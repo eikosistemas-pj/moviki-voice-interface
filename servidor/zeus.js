@@ -39,6 +39,8 @@ import { montarSystem, pensar } from './cerebro.js'
 import * as estado from './estado.js'
 import * as olhos from './olhos.js'
 import { montarAviso } from './aviso.js'
+import * as fatos from './fatos.js'
+import { avaliar } from './vigia.js'
 import { criarPorta } from './porta.js'
 import { executarProposta } from './oficina.js'
 import { montarProposta } from './trabalho.js'
@@ -377,14 +379,22 @@ const servidor = http.createServer(async (req, res) => {
 
       const atual = estado.ler()
       const prontas = estado.tarefasParaContar(atual)
-      if (!prontas.length) return responderJSON(res, 200, { fala: null })
+      const chamados = estado.chamadosPendentes(atual)
+      if (!prontas.length && !chamados.length) {
+        return responderJSON(res, 200, { fala: null })
+      }
 
-      const aviso = montarAviso(prontas)
-      // Marcadas assim que saem daqui: se a tela nao conseguir falar, e melhor
-      // perder um aviso do que o Zeus repetir a mesma novidade para sempre.
+      // O que ele FEZ vem antes do que ele PERCEBEU: o Paulo pediu o
+      // trabalho, entao a resposta ao pedido dele vem primeiro.
+      const aviso = montarAviso(prontas) || { fala: '', links: [] }
+      const falas = [aviso.fala, ...chamados.map((c) => c.fala)].filter(Boolean)
+
+      // Esvaziadas assim que saem daqui: se a tela nao conseguir falar, e
+      // melhor perder um aviso do que o Zeus repetir o mesmo para sempre.
       estado.marcarContadas(atual)
+      estado.limparChamados(atual)
       estado.gravar(atual)
-      return responderJSON(res, 200, aviso)
+      return responderJSON(res, 200, { fala: falas.join(' '), links: aviso.links })
     }
     if (req.method === 'GET' && req.url === '/api/zeus/vivo') {
       // Sinal de vida, sem contar nada. Serve para o instalador conferir que
@@ -435,6 +445,35 @@ function manterOlhosAbertos() {
   if (typeof t.unref === 'function') t.unref()
 }
 
+/**
+ * A RONDA — o Zeus olhando em volta sem ninguem pedir.
+ *
+ * De cinco em cinco minutos ele confere a maquina, a voz e os Pull Requests
+ * parados. O que vira chamado quem decide e o vigia; aqui so se coleta e se
+ * enfileira.
+ *
+ * Cinco minutos, e nao doze segundos como a pergunta da tela: a ronda custa
+ * uma consulta ao GitHub por repositorio, e nada disso muda de segundo em
+ * segundo. O Paulo continua sendo avisado na primeira brecha em que ele nao
+ * estiver falando.
+ */
+function ronda() {
+  const atual = estado.ler()
+  const teto = estado.passouDoTeto(atual, LIMITE_DIA)
+
+  fatos
+    .coletar({ usadasHoje: teto.chamadas, limiteDia: LIMITE_DIA })
+    .then((visto) => {
+      const chamado = avaliar(visto, atual.chamadosDados || {})
+      if (!chamado) return
+      const agora = estado.ler()
+      estado.enfileirarChamado(agora, chamado.chave, chamado.fala)
+      estado.gravar(agora)
+      console.log(`[zeus] vou chamar o Paulo: ${chamado.chave}`)
+    })
+    .catch((e) => console.error('[zeus] a ronda falhou:', e?.message || e))
+}
+
 servidor.listen(PORTA, '127.0.0.1', () => {
   console.log(`[zeus] de pe em 127.0.0.1:${PORTA} — teto de ${LIMITE_DIA} falas/dia`)
   console.log(
@@ -443,6 +482,12 @@ servidor.listen(PORTA, '127.0.0.1', () => {
       : '[zeus] olhos FECHADOS: sabe so o que esta escrito na instrucao dele'
   )
   manterOlhosAbertos()
+
+  // Primeira ronda com folga: subir o servico ja e um momento de maquina
+  // ocupada, e medir memoria nessa hora daria susto por nada.
+  setTimeout(ronda, 60_000)
+  const rondaTimer = setInterval(ronda, 5 * 60 * 1000)
+  if (typeof rondaTimer.unref === 'function') rondaTimer.unref()
   if (!porta.exigeSenha()) {
     console.warn(
       '[zeus] ATENCAO: sem ZEUS_SENHA configurada. A porta esta ABERTA — ' +

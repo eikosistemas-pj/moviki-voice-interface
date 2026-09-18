@@ -235,6 +235,37 @@ que já se sabe qual é.
 O link não é falado: soletrar endereço em voz alta é tortura. Ele volta na
 resposta escrita.
 
+### A ronda — ele chamando você por conta própria
+
+O aviso conta o que o Zeus **fez**. A ronda conta o que ele **percebeu** —
+coisa que ninguém pediu para ele olhar. É a diferença entre um funcionário que
+entrega o que foi mandado e um que bate na porta para avisar que tem fumaça
+saindo da cozinha.
+
+De cinco em cinco minutos ele confere quatro coisas e, havendo o que dizer,
+chama você pelo nome na primeira brecha em que você não estiver falando:
+
+| O que ele percebe | Por que importa |
+|---|---|
+| A voz caiu | Ele pensa mas não fala, e você só descobriria ao tentar conversar |
+| A máquina apertando de memória | Já aconteceu nesta VPS: sem memória o sistema mata programas, e a voz é a primeira a morrer |
+| Pull Request parado há mais de 6 horas | Enquanto você não aprova, o trabalho não está no ar — e ninguém mais vai lembrar |
+| O teto de falas do dia chegando | Emudecer sem avisar deixaria você achando que quebrou |
+
+**O perigo aqui é o excesso, não a falta.** Assistente que fala demais é
+desligado na primeira semana — e aí não avisa nem o que importava. Três regras
+duras, todas travadas por teste:
+
+1. **Cada assunto fala uma vez.** Enquanto a situação não mudar, ele cala por
+   seis horas.
+2. **Tem descanso entre avisos.** Mesmo com três coisas erradas ao mesmo
+   tempo, ele conta uma e espera dez minutos.
+3. **Só o que você pode resolver.** "A memória está em 61%" não é aviso, é
+   ruído.
+
+Nada disso passa pelo cérebro: perceber não é pensar. São contas que a máquina
+faz de graça e na hora, e as frases já se sabe quais são.
+
 ## O botão de pânico
 
 O Zeus nunca pode se trancar por dentro. A garantia não depende dele:

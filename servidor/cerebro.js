@@ -88,6 +88,12 @@ COMO VOCE FALA
   sem endereco de site soletrado. DUAS OU TRES FRASES, no maximo — cada frase
   a mais e mais tempo que o Paulo passa esperando o audio sair. Se ele quiser
   detalhe, ele pede.
+- COMECE SEMPRE POR UMA FRASE BEM CURTA. A sua primeira frase e a unica que o
+  Paulo espera ouvindo SILENCIO: ela precisa virar audio inteira antes de sair
+  um som. Uma primeira frase de dez palavras faz ele esperar o dobro de uma de
+  cinco. Diga o essencial em poucas palavras ("Terminei.", "Ja esta no ar.",
+  "Nao deu.") e guarde o detalhe para a frase seguinte, que e preparada
+  enquanto a primeira ja esta tocando.
 - Nada de codigo. Explique em linguagem de negocio: o que muda para o
   lojista, para o parceiro, para o Paulo.
 - Trate o Paulo por voce, sem cerimonia. Voce trabalha com ele ha tempo.
@@ -132,15 +138,14 @@ conversa: voce avisa que comecou e conta o resultado quando ele falar de novo.`
 }
 
 /**
- * O pedaco que MUDA a cada conversa: o turno e o retrato de agora.
+ * O pedaco que MUDA A CADA FALA: o turno e o trabalho por contar.
  *
- * Separado da persona de proposito. A Anthropic cobra um decimo pelo texto
- * repetido que ela ja viu, mas so enquanto o comeco do prompt nao muda nem um
- * byte. Persona e mapa sao iguais sempre e vao no pedaco barato; o retrato
- * muda de quinze em quinze minutos e fica de fora. Misturar os dois faria o
- * mapa inteiro ser cobrado cheio a cada frase — e o mapa e grande.
+ * E o unico bloco sem desconto de cache, e por isso e o unico que precisa ser
+ * pequeno. O retrato saiu daqui e virou bloco proprio, com cache: ele muda de
+ * quinze em quinze minutos, nao a cada frase, e mandar dois mil tokens dele a
+ * preco cheio toda vez era demora e dinheiro jogados fora.
  */
-export function montarMomento({ turnoAberto, retrato, tarefas }) {
+export function montarMomento({ turnoAberto, tarefas }) {
   const turno = turnoAberto
     ? 'ABERTO — o Paulo saiu e passou o posto para voce. Pode decidir dentro da cerca, e vai prestar contas quando ele chegar.'
     : 'FECHADO — o Paulo esta aqui. Voce executa o que ele mandar e nao decide nada no lugar dele.'
@@ -163,9 +168,6 @@ export function montarMomento({ turnoAberto, retrato, tarefas }) {
     partes.push('')
   }
 
-  partes.push(
-    retrato || '(ainda nao olhei os repositorios; nao afirme nada sobre o estado do codigo)'
-  )
   return partes.join('\n')
 }
 
@@ -186,9 +188,34 @@ export function montarSystem({ turnoAberto, mapa, retrato, tarefas }) {
     )
   }
 
+  // TRES BLOCOS, DO MAIS PARADO PARA O MAIS MEXIDO — e os dois primeiros com
+  // marca de cache. O desconto so vale enquanto o COMECO do pedido nao muda
+  // nem um byte, entao a ordem aqui e a regra:
+  //
+  //   1. persona + mapa .... igual sempre          -> cache de 1 hora
+  //   2. retrato ........... muda de 15 em 15 min  -> cache normal
+  //   3. turno + tarefas ... muda a cada fala      -> sem cache
+  //
+  // O CACHE DE UMA HORA E CONSERTO DE DEMORA, NAO SO DE CUSTO — 18/09/2026.
+  // O registro da VPS mostrou varias conversas com "0 do cache": o desconto
+  // padrao vence em cinco minutos, e o Paulo fala com o Zeus de vez em quando,
+  // nao de cinco em cinco minutos. Cada vencimento obriga a reler treze mil
+  // tokens do zero — o que ele sente como a resposta demorando mais.
+  //
+  // O retrato fica FORA do bloco de uma hora porque ele muda sozinho a cada
+  // quinze minutos: junto, um byte novo nele derrubaria o mapa inteiro.
   return [
-    { type: 'text', text: fixo.join('\n'), cache_control: { type: 'ephemeral' } },
-    { type: 'text', text: montarMomento({ turnoAberto, retrato, tarefas }) },
+    {
+      type: 'text',
+      text: fixo.join('\n'),
+      cache_control: { type: 'ephemeral', ttl: '1h' },
+    },
+    {
+      type: 'text',
+      text: retrato || '(ainda nao olhei os repositorios; nao afirme nada sobre o estado do codigo)',
+      cache_control: { type: 'ephemeral' },
+    },
+    { type: 'text', text: montarMomento({ turnoAberto, tarefas }) },
   ]
 }
 

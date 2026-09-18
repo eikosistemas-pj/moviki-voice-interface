@@ -133,35 +133,67 @@ journalctl -u zeus-cerebro -n 200 --no-pager | grep "API recusou"
 
 Se aparecer alguma linha aí, era isso.
 
-### 4.4 A pergunta do Paulo: "a máquina aguenta?"
+### 4.4 🔴 A resposta medida: **a máquina é o gargalo, mas o código era pior**
 
-**Resposta honesta: só o pedaço 3 da tabela acima depende da máquina — e é o
-único que roda num processador só.** O cérebro é chamada de API (não usa a CPU
-da VPS) e o resto é código.
+O Paulo rodou o `servidor/medir.sh` na VPS em 18/09/2026. Números reais:
 
-Não dá para responder "aguenta ou não" no chute, então entrou um medidor:
-
-```
-cd /root/eikosistemas/moviki-voice-interface && bash servidor/medir.sh
-```
-
-Ele mede o tempo do Kokoro para uma frase curta — que é exatamente o tempo até
-o Zeus abrir a boca — e diz como ler o número:
-
-| Frase curta leva | Significa |
+| Medida | Valor |
 |---|---|
-| menos de 1,5s | a máquina dá conta; demora que sobrar é de código |
-| 1,5s a 3s | apertado, dá para conviver, mas não é "toma lá dá cá" |
-| mais de 3s | **a máquina é o gargalo** — nenhum conserto de código tira isso |
+| 62 letras viram áudio em | 3,1s |
+| 180 letras viram áudio em | 8,2s |
+| → custo por letra | **0,043s** |
+| → custo fixo por pedido | **0,42s** |
+| → **velocidade da síntese** | **~1,65x o tempo real da fala** |
+| O cérebro (do `journalctl`) | **3,3s a 4,0s** por resposta |
 
-Se cair no terceiro caso, os caminhos são dois: **mais processadores**
-(CPX22 ou CPX32, é troca de plano na Hetzner, não é reinstalar tudo) ou **tirar
-a voz da VPS**. O script também mostra a "CPU roubada": acima de 5% quer dizer
-que a Hetzner está dividindo o processador com outro cliente, e aí nem trocar
-código nem trocar plano resolve sozinho.
+**Estes números não podem ser perdidos.** Eles são a base de toda a afinação
+em `lib/partirFala.js`. Se a máquina mudar, rodar o `medir.sh` de novo e
+reajustar a razão da escada.
 
-**Rodar esse script é o próximo passo depois de publicar.** Sem ele, a decisão
-de trocar de máquina seria dinheiro gasto no palpite.
+**O que eles dizem:**
+
+1. **"1,65x o tempo real" é o número que governa tudo.** Enquanto um pedaço
+   toca, dá para preparar um pedaço 1,65 vez maior. Se o pedaço seguinte for
+   maior que isso, a fila atrasa e o Zeus cala no meio da resposta.
+2. **A máquina é lenta**, mas dá para trabalhar com ela. O que estava
+   realmente errado era o código mandar sintetizar tudo de uma vez.
+3. **O cérebro demorava 3,5s** e ninguém ouvia nada nesse tempo. Com o fluxo,
+   a primeira frase chega em cerca de 1s.
+
+### 4.5 A troca que foi escolhida, e como desfazer
+
+Resposta típica de três frases, na máquina dele:
+
+| | 1ª palavra | Pausas no meio |
+|---|---|---|
+| Hoje, na VPS | **10,9s** | nenhuma |
+| Com o #10 | **1,9s** | uma de ~2,9s |
+
+**A pausa é de propósito.** Ela aparece porque a frase de abertura ("Terminei.")
+é curta e a seguinte é grande demais para a máquina preparar no tempo em que
+uma palavra toca.
+
+Escolhido assim porque a reclamação do Paulo é o tempo entre **ele falar e o
+Zeus responder** — não o ritmo do meio da resposta. Pausa depois de uma resposta
+já começada soa como alguém tomando fôlego; dez segundos de silêncio antes de
+qualquer som soa como robô quebrado.
+
+> **Se ele disser que ficou picotado:** subir `MINIMO_PRIMEIRO` em
+> `lib/partirFala.js` de 8 para 30. Isso junta a abertura com a frase seguinte:
+> a 1ª palavra passa para ~5,9s, e a pausa some. É uma linha, e está comentada
+> lá.
+
+### 4.6 O que ainda pode ser feito pela demora
+
+Em ordem de quanto rende, se depois de publicar ainda incomodar:
+
+1. **Mais processadores** (CPX22 ou CPX32 na Hetzner — troca de plano, não
+   reinstala nada). Dobrar o processador corta a síntese pela metade e faz a
+   pausa da 4.5 desaparecer sozinha. **É o único caminho que ataca a causa.**
+2. **Encurtar a resposta dele** de "duas ou três frases" para "uma ou duas" —
+   uma linha na instrução, custa detalhe.
+3. **Tirar a voz da VPS** para um serviço de fala hospedado. Resolve de vez,
+   mas traz dependência nova e conta nova.
 
 ## 5. Pendências — em ordem de importância
 

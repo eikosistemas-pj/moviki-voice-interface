@@ -41,6 +41,25 @@ import * as estado from './estado.js'
 const PORTA = Number(process.env.ZEUS_PORTA || 8124)
 const LIMITE_DIA = Number(process.env.ZEUS_LIMITE_DIA || 200)
 
+// CONFERENCIA DE VOZ — o portao da autonomia.
+//
+// Ligada (padrao), o turno so abre com a voz do Paulo reconhecida. O
+// conferidor ainda nao existe na VPS, entao com ela ligada o Zeus nunca
+// assume — e para um robo que ainda esta sendo moldado isso e paralisia, nao
+// seguranca.
+//
+// O Paulo decidiu em 18/09/2026 deixar a conferencia para depois e ver o Zeus
+// funcionando. Com ZEUS_CONFERE_VOZ=0, a frase falada basta para abrir o
+// turno. O risco fica escrito com todas as letras: qualquer voz que diga a
+// frase perto da tela assume o posto — inclusive uma gravacao.
+//
+// O que NAO afrouxa junto: a lista de assuntos que nunca sao do robo continua
+// valendo igual, com turno aberto ou fechado. Mesmo assumindo sem prova, o
+// Zeus nao aprova Pull Request, nao mexe em preco e nao encosta em dinheiro.
+// O padrao no codigo continua sendo o seguro; quem afrouxa e a VPS, de
+// propria mao, e o afrouxamento fica registrado na trilha a cada abertura.
+const CONFERE_VOZ = process.env.ZEUS_CONFERE_VOZ !== '0'
+
 /** Frases fixas. Nao gastam chamada paga: sao respostas de porta, nao de ideia. */
 const FALAS = {
   semToken: 'Nao reconheci de onde veio esse pedido.',
@@ -51,6 +70,8 @@ const FALAS = {
     'Nao consigo confirmar que e voce. Enquanto a conferencia de voz nao estiver instalada aqui, eu nao assumo.',
   jaAberto: 'Eu ja estou no comando.',
   assumi: 'Assumi. Vou tocando e presto contas quando voce chegar.',
+  assumiSemProva:
+    'Assumi. Aviso que ainda nao sei conferir se e voce de verdade — qualquer voz me abriria agora.',
   jaFechado: 'Eu ja nao estava no comando.',
   assuntoDoPaulo: 'Isso e seu, nao meu. Nao mexo nisso nem no seu turno.',
   semTurno: 'Isso e decisao sua, e voce esta aqui. Me diga o que fazer.',
@@ -118,10 +139,10 @@ async function tratarFala(req, res) {
     return responderJSON(res, 200, { resposta: FALAS.vazio, turno: atual.turno })
   }
 
-  // A conferencia de voz ainda nao existe na VPS. Enquanto nao existir, a
-  // trava recusa a abertura do turno — e ESSE e o comportamento certo: a
-  // alternativa seria liberar o comando da empresa para qualquer voz.
-  const vozConferida = false
+  // Com a conferencia ligada, a prova ainda nao existe (o conferidor nao foi
+  // instalado), entao a trava recusa. Com ela desligada por decisao do Paulo,
+  // a frase falada vale como prova — e a trilha registra que foi assim.
+  const vozConferida = !CONFERE_VOZ
 
   const veredito = decidir(atual.turno, {
     tipo: pedido.tipo,
@@ -143,10 +164,22 @@ async function tratarFala(req, res) {
         veredito.motivo === 'turno_ja_aberto' ? FALAS.jaAberto : FALAS.vozNaoConferida
       return responderJSON(res, 200, { resposta: fala, turno: atual.turno })
     }
-    atual.turno = { aberto: true, abertoEm: new Date().toISOString() }
-    estado.anotar(atual, { o: 'turno_aberto', resumo: 'assumi o posto' })
+    atual.turno = {
+      aberto: true,
+      abertoEm: new Date().toISOString(),
+      // Fica gravado NO TURNO, nao so no log: daqui a tres meses a pergunta
+      // "como esse turno foi aberto?" precisa ter resposta.
+      semConferenciaDeVoz: !CONFERE_VOZ,
+    }
+    estado.anotar(atual, {
+      o: 'turno_aberto',
+      resumo: CONFERE_VOZ ? 'assumi o posto' : 'assumi o posto sem conferencia de voz',
+    })
     estado.gravar(atual)
-    return responderJSON(res, 200, { resposta: FALAS.assumi, turno: atual.turno })
+    return responderJSON(res, 200, {
+      resposta: CONFERE_VOZ ? FALAS.assumi : FALAS.assumiSemProva,
+      turno: atual.turno,
+    })
   }
 
   // --- Fechar o turno -----------------------------------------------------
@@ -224,4 +257,10 @@ const servidor = http.createServer(async (req, res) => {
 // servidor de comando nao precisa estar exposto direto na internet.
 servidor.listen(PORTA, '127.0.0.1', () => {
   console.log(`[zeus] de pe em 127.0.0.1:${PORTA} — teto de ${LIMITE_DIA} falas/dia`)
+  if (!CONFERE_VOZ) {
+    console.warn(
+      '[zeus] ATENCAO: conferencia de voz DESLIGADA (ZEUS_CONFERE_VOZ=0). ' +
+        'Qualquer voz que diga a frase abre o turno, inclusive uma gravacao.'
+    )
+  }
 })

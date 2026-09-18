@@ -108,6 +108,16 @@ const VERBO_DE_MUDANCA =
   /\b(aprova|aprovar|aprove|junta|juntar|mescla|mesclar|merge|sobe|subir|publica|publicar|posta|postar|muda|mudar|mude|altera|alterar|troca|trocar|aumenta|aumentar|reduz|reduzir|baixa|baixar|apaga|apagar|apague|deleta|deletar|remove|remover|cancela|cancelar|paga|pagar|transfere|transferir|libera|liberar|desliga|desligar|reajusta|reajustar|zera|zerar|derruba|derrubar)\b/
 
 const ASSUNTOS = [
+  // O PROPRIO ZEUS vem primeiro: "muda a trava" e sobre ele mesmo, nao sobre
+  // a seguranca do Moviki.
+  //
+  // De proposito NAO basta a palavra "zeus" para cair aqui: o Paulo chama ele
+  // pelo nome o tempo todo ("Zeus, muda o texto do site"), e um vocativo nao
+  // pode virar assunto proibido. O que marca sao as tripas dele.
+  [
+    'o_proprio_zeus',
+    /\b(trava|turno|voce mesmo|si mesmo|seu codigo|proprio codigo|seu prompt|sua instrucao|seu servidor|servidor do zeus|cerebro do zeus|vps|systemd|nginx|zeus-cerebro|sua chave|seu token)\b/,
+  ],
   ['aprovar_pr', /\b(pull request|pull requests|\bpr\b|merge|main|producao)\b/],
   // Os nomes dos planos entram porque o Paulo fala "sobe o Premium", nao
   // "sobe o preco do plano Premium". "Pro" sozinho fica de fora de

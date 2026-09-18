@@ -102,6 +102,21 @@ export default function App() {
   const humorVisivel =
     humorForcado || (estado === ESTADOS.ERRO ? HUMORES.FIRMEZA : humor)
 
+  /**
+   * O UNICO lugar do sistema que liga o microfone.
+   *
+   * REGRA DO PAULO (18/09/2026): o Zeus nao aciona o microfone sozinho. Quem
+   * abre o microfone e ele, com o dedo, quando quer falar.
+   *
+   * Nao existe escuta continua, nao existe "volta a ouvir depois de
+   * responder", nao existe palavra de despertar. A melhoria obvia que alguem
+   * vai querer fazer um dia — reabrir a escuta sozinho quando o Zeus termina
+   * de falar — e justamente a que NAO pode ser feita: um robo com o
+   * microfone na mao e um microfone aberto na casa do dono.
+   *
+   * O `continuous = false` em useEscuta.js e a outra metade dessa garantia:
+   * a escuta morre sozinha no fim da frase.
+   */
   const aoTocarMicrofone = () => {
     if (falando || carregando) {
       parar()

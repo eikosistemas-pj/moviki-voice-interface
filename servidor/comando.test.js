@@ -6,7 +6,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { assuntoVedado, entender } from './comando.js'
-import { PEDIDOS } from '../lib/turno.js'
+import { NUNCA_SOZINHO, PEDIDOS } from '../lib/turno.js'
 
 test('"Zeus, assuma daqui" passa o posto', () => {
   assert.equal(entender('Zeus, assuma daqui').tipo, PEDIDOS.ABRIR_TURNO)
@@ -101,4 +101,28 @@ test('nome de plano conta como preco; "pro" solto nao', () => {
   assert.equal(assuntoVedado('muda o Enterprise'), 'preco')
   // "pro" em fala corrente e "para o": nao pode virar mexida em preco.
   assert.equal(assuntoVedado('muda pro azul'), null)
+})
+
+// --- O Zeus nao mexe em si mesmo ------------------------------------------
+// A porta que nao pode ser trancada por dentro: sem isso, uma decisao infeliz
+// no turno aberto fecharia o robo e ninguem mais entraria para consertar.
+
+test('mandar o Zeus mexer nele mesmo e barrado', () => {
+  assert.equal(assuntoVedado('muda a trava do turno'), 'o_proprio_zeus')
+  assert.equal(assuntoVedado('altera o seu codigo'), 'o_proprio_zeus')
+  assert.equal(assuntoVedado('troca o seu prompt'), 'o_proprio_zeus')
+  assert.equal(assuntoVedado('desliga o zeus-cerebro'), 'o_proprio_zeus')
+  assert.equal(assuntoVedado('muda a sua chave'), 'o_proprio_zeus')
+  assert.equal(assuntoVedado('altera o nginx da vps'), 'o_proprio_zeus')
+})
+
+test('chamar o Zeus pelo nome NAO vira assunto proibido', () => {
+  // O Paulo fala com ele pelo nome o tempo todo. Vocativo nao e assunto — se
+  // virasse, o Zeus recusaria metade das ordens dele.
+  assert.equal(assuntoVedado('Zeus, muda o texto da pagina de venda'), null)
+  assert.equal(assuntoVedado('Zeus, altera a videoaula da live'), null)
+})
+
+test('o proprio Zeus esta na lista que nunca e do robo', () => {
+  assert.ok(NUNCA_SOZINHO.includes('o_proprio_zeus'))
 })

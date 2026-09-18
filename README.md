@@ -145,9 +145,11 @@ chave, para poder ser provada por teste.
 
 ### O que ainda falta (nao esta no ar)
 
-- O **conferidor de voz** (reconhecer que quem falou foi o Paulo). Sem ele o
-  turno NAO ABRE — e esse e o comportamento certo: a alternativa seria liberar
-  o comando da empresa para qualquer voz que passe perto da tela.
+- O **conferidor de voz** (reconhecer que quem falou foi o Paulo). Enquanto
+  ele nao existir, o turno abre so com a frase falada — decisao do Paulo em
+  18/09/2026 (`ZEUS_CONFERE_VOZ=0`), para ver o Zeus funcionando antes de
+  fechar a porta. Qualquer voz que diga a frase assume o posto, inclusive uma
+  gravacao. Os assuntos vedados continuam vedados assim mesmo.
 - O **caminho de comando**: o Zeus acionando de fato as cadeiras do time. Hoje
   ele conversa, sabe o que e o Moviki e obedece a trava, mas nao poe ninguem
   para trabalhar.

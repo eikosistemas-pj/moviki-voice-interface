@@ -31,6 +31,9 @@ export function useEscuta({ idioma = 'pt-BR', aoFinalizar } = {}) {
 
     const rec = new Reconhecimento()
     rec.lang = idioma
+    // false de proposito: a escuta morre no fim da frase. Metade da garantia
+    // de que o Zeus nao fica com o microfone aberto — a outra metade e que so
+    // o botao chama `comecar()`. Ver App.jsx, aoTocarMicrofone.
     rec.continuous = false
     rec.interimResults = true
 

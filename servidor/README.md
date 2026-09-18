@@ -10,7 +10,22 @@ O Zeus tem duas metades na VPS:
 A tela conversa com as duas pelo mesmo endereço, através do Nginx, para não
 esbarrar em CORS.
 
-## Antes de tudo: as variáveis
+## O jeito rápido: o instalador
+
+Na VPS, dentro da pasta do repositório:
+
+    sudo bash servidor/instalar.sh
+
+Ele pergunta a chave da Anthropic (digitada, nunca aparece na tela), guarda em
+`/etc/zeus/zeus.env` só legível pelo root, cria o serviço do systemd que sobe
+sozinho depois de reiniciar, prepara a tela, refaz o build e confere se o
+Zeus respondeu. No fim mostra a única linha que falta no Nginx.
+
+Pode rodar de novo quando quiser — para trocar a chave, por exemplo.
+
+O resto deste arquivo explica o que ele faz, para quando algo sair do lugar.
+
+## As variáveis
 
 Nunca em arquivo dentro do repositório. Na VPS, como variável de ambiente
 (o mesmo lugar onde já vive a configuração do `zeus-voz`).
@@ -23,6 +38,28 @@ Nunca em arquivo dentro do repositório. Na VPS, como variável de ambiente
 | `ZEUS_MODELO` | opcional. Padrão `claude-opus-5` |
 | `ZEUS_ESTADO` | onde guardar a memória. Padrão `./dados/estado.json` |
 | `ZEUS_PORTA` | padrão 8124 |
+| `ZEUS_CONFERE_VOZ` | `1` (padrão) exige a voz do Paulo para abrir o turno. `0` desliga |
+
+### Sobre o `ZEUS_CONFERE_VOZ`
+
+Com ele ligado, o turno só abre com a voz do Paulo reconhecida. Como o
+conferidor de voz ainda não existe na VPS, ligado significa **o Zeus nunca
+assume** — e para um robô que ainda está sendo moldado isso é paralisia, não
+segurança.
+
+O Paulo decidiu em 18/09/2026 deixar a conferência para depois e ver o Zeus
+funcionando. O instalador escreve `0`. O risco, escrito com todas as letras:
+**qualquer voz que diga a frase perto da tela assume o posto, inclusive uma
+gravação.**
+
+O que **não** afrouxa junto: a lista de assuntos que nunca são do robô continua
+valendo igual. Mesmo assumindo sem prova, o Zeus não aprova Pull Request, não
+mexe em preço e não encosta em dinheiro.
+
+Toda abertura sem conferência fica marcada no turno e na trilha — daqui a três
+meses, a pergunta "como esse turno foi aberto?" tem resposta.
+
+Quando o conferidor existir, troque para `1`.
 
 **O `ZEUS_TOKEN` não é segurança.** Ele viaja para o navegador e qualquer um
 lê no código da página. Serve para o endereço não ficar aberto de brincadeira
@@ -63,6 +100,38 @@ regra de origem segura, não defeito.
 
 Deve responder com o estado do turno. Se responder `aberto: false`, está certo
 — o turno nasce fechado.
+
+## O botão de pânico
+
+O Zeus nunca pode se trancar por dentro. A garantia não depende dele:
+
+    sudo bash servidor/parar.sh
+
+Isso derruba o serviço e força o turno a fechar no arquivo de estado, sem
+passar pelo Zeus. Funciona mesmo que ele esteja travado, mudo ou respondendo
+besteira.
+
+Na mão, se preferir:
+
+    sudo systemctl stop zeus-cerebro
+
+A VPS é sua. O serviço roda com usuário sem privilégio, e o Zeus não tem
+como escrever no próprio código, no serviço do systemd nem no arquivo de
+segredos — ele só fala.
+
+**Ele também não mexe em si mesmo por ordem falada.** "Muda a trava", "altera
+o seu código", "desliga o zeus-cerebro" caem na lista dos assuntos que nunca
+são do robô, com turno aberto ou fechado. Chamar ele pelo nome não conta:
+"Zeus, muda o texto da página" é ordem normal, e ele obedece.
+
+## O microfone é seu
+
+O Zeus **não aciona o microfone**. Existe um único ponto no código que liga a
+escuta, e é o botão na tela. Não há escuta contínua, não há palavra de
+despertar, e a escuta morre sozinha no fim da frase.
+
+A "melhoria" que alguém vai querer fazer um dia — reabrir a escuta sozinho
+quando o Zeus terminar de falar — é justamente a que não pode ser feita.
 
 ## A memória
 

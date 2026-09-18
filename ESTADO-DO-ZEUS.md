@@ -331,11 +331,41 @@ Em `console.anthropic.com`. **A ordem importa, senão o atendente do WhatsApp em
 2. Cria a chave nova do `moviki-ai` → põe nas Environment Variables do Vercel → publica
 3. **Só depois** apaga a chave velha
 
-### 5.2 🔴 HTTPS
+### 5.2 🔴 HTTPS — **o script está pronto, falta o Paulo criar o subdomínio**
 
-Hoje a senha de entrada do Zeus atravessa a internet aberta, e o microfone do navegador
-só é liberado direito em endereço seguro. Falta um subdomínio (ex.: `zeus.moviki.com.br`)
-e o certificado.
+Isto deixou de ser teoria em 18/09/2026: **o Paulo abriu no celular e o microfone
+não funcionou.** Não é defeito do Zeus nem do aparelho — navegador nenhum
+entrega microfone a uma página sem cadeado. `localhost` é a única exceção, e é
+por isso que no computador dele às vezes funciona e no celular nunca.
+
+E a outra metade continua valendo, pior ainda: **a senha dele atravessa a
+internet aberta.**
+
+**O que falta é só a parte do Paulo** — criar o registro no painel do domínio:
+
+| Tipo | Nome | Valor |
+|---|---|---|
+| A | `zeus` | `204.168.204.48` |
+
+Depois, uma linha na VPS:
+
+```
+bash servidor/https.sh zeus.moviki.com.br
+```
+
+O script confere se o endereço já aponta para a máquina **antes** de pedir o
+certificado (a Let's Encrypt limita tentativas erradas por semana), descobre em
+que porta a tela está atendendo, instala e configura o Nginx, emite o
+certificado e liga a renovação automática.
+
+> **Uma coisa no Nginx que não pode ser perdida:** o bloco de `/api/zeus` tem
+> `proxy_buffering off`. Sem isso o Nginx segura o fluxo de frases e entrega
+> tudo junto no fim — desfazendo em silêncio todo o conserto da demora e
+> devolvendo o Zeus para os dez segundos de espera. Já está no script; se
+> alguém reescrever a configuração à mão, tem que continuar lá.
+
+Enquanto não sobe: a tela agora **explica** que o microfone está bloqueado por
+falta de endereço seguro, em vez de deixar um botão morto sem dizer nada.
 
 ### 5.3 🟡 Conferir a voz de quem abre o turno
 
@@ -359,7 +389,31 @@ O Paulo já decidiu: *"dá para resolver de um jeito mais seguro depois, a gente
 O caminho certo é o `moviki-robo` (que já tem a chave) publicar um resumo para o Zeus ler —
 nunca a VPS ganhar a chave.
 
-### 5.6 🟡 A voz longa continua longa
+### 5.6 🟢 A cara e a voz dele (decisões do Paulo, 18/09/2026)
+
+**A saudação da tela de entrada é dele, palavra por palavra.** Não mexer sem
+ele pedir:
+
+> *"Só darei acesso a todo meu conhecimento, se você provar que é o meu
+> mestre... Digite a senha, caso contrário estará destinado ao fracasso,
+> comece..."*
+
+Ela aparece escrita na tela de entrada e é **falada no primeiro toque no
+microfone** — que é o único momento em que pode ser: navegador nenhum deixa uma
+página tocar áudio antes de alguém tocar nela.
+
+**Ele fala como brasileiro fala.** O Paulo reclamou que ele dizia "vo-CÊ" com
+peso na primeira sílaba. As duas coisas têm o mesmo conserto: no caminho até o
+motor de voz, "você" vira "cê", "está" vira "tá", "para o" vira "pro". O texto
+escrito (Pull Request, trilha, registro) continua formal — isso é fala, não
+redação. Mora em `lib/pronuncia.js`, num bloco que dá para apagar inteiro se
+soar forçado.
+
+Dois cuidados travados por teste: *"isso não é meu"* nunca vira *"isso né meu"*
+(o "né" só vale no fim da frase), e *"o robô **para** às seis"* nunca vira *"o
+robô pras seis"* — o acento é o que separa o verbo da preposição.
+
+### 5.7 🟡 A voz longa continua longa
 
 O conserto do #10 encurta o tempo até a **primeira** palavra. O tempo total de
 fala continua sendo o que é: numa máquina de um processador, quanto mais ele
@@ -367,7 +421,7 @@ fala, mais ele demora. Se depois de publicar ainda incomodar, o caminho é
 encurtar a resposta dele (de "duas ou três frases" para "uma ou duas") — é uma
 linha na instrução dele, e é decisão do Paulo, porque custa detalhe.
 
-### 5.7 🟢 Limpeza
+### 5.8 🟢 Limpeza
 
 - Conferir se a falha dos dez minutos deixou algum ramo `zeus/…` ou Pull Request pela metade
   em `moviki-app`.

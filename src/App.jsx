@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import PainelZeus from './components/PainelZeus'
 import BotaoMicrofone from './components/BotaoMicrofone'
 import TelaEntrada from './components/TelaEntrada'
@@ -7,6 +7,7 @@ import { useEscuta } from './hooks/useEscuta'
 import { useEntrada } from './hooks/useEntrada'
 import { useAviso } from './hooks/useAviso'
 import { detectarHumor } from './lib/humor'
+import { SAUDACAO } from './components/TelaEntrada'
 import { lerLinhas } from '../lib/ndjson'
 import { ENDPOINT_CEREBRO, ESTADOS, HUMORES } from './config/voz'
 
@@ -26,6 +27,9 @@ export default function App() {
   const [humor, setHumor] = useState(HUMORES.NEUTRO)
   const [pensando, setPensando] = useState(false)
   const entrada = useEntrada()
+  // A saudacao so pode ser FALADA depois de o dedo tocar a tela: navegador
+  // nenhum deixa um site comecar a tocar audio sozinho. Ver aoTocarMicrofone.
+  const jaSaudouRef = useRef(false)
 
   const { humorForcado, calibrar } = useMemo(() => {
     if (typeof window === 'undefined') return { humorForcado: null, calibrar: false }
@@ -128,9 +132,14 @@ export default function App() {
     [falar, falarFluxo, entrada]
   )
 
-  const { comecar, encerrar, ouvindo, erro: erroEscuta, suportado } = useEscuta({
-    aoFinalizar: responder,
-  })
+  const {
+    comecar,
+    encerrar,
+    ouvindo,
+    erro: erroEscuta,
+    suportado,
+    enderecoSeguro,
+  } = useEscuta({ aoFinalizar: responder })
 
   const estado = useMemo(() => {
     if (erroVoz || erroEscuta) return ESTADOS.ERRO
@@ -178,6 +187,23 @@ export default function App() {
       encerrar()
       return
     }
+
+    // A SAUDACAO SAI NO PRIMEIRO TOQUE, E SO NO PRIMEIRO.
+    //
+    // Pedido do Paulo em 18/09/2026. E o unico momento em que ela PODE sair:
+    // navegador nenhum deixa uma pagina tocar audio antes de a pessoa tocar
+    // nela — se ele tentasse falar ao abrir, o som seria bloqueado em
+    // silencio e o Zeus pareceria mudo logo na apresentacao.
+    //
+    // Depois de falar, ele NAO abre o microfone: o dedo do Paulo decide quando
+    // ele ouve, e isso vale inclusive aqui. Ele toca de novo para falar.
+    if (!jaSaudouRef.current) {
+      jaSaudouRef.current = true
+      setHumor(HUMORES.FIRMEZA)
+      falar(SAUDACAO)
+      return
+    }
+
     comecar()
   }
 
@@ -233,7 +259,20 @@ export default function App() {
           fala o microfone nao faz nada, e botao morto sem explicacao e
           pior que uma linha de texto.
         */}
-        {!suportado && (
+        {/*
+          Botao morto sem explicacao faz a pessoa achar que o robo quebrou. As
+          duas causas possiveis tem consertos completamente diferentes, entao
+          elas aparecem separadas.
+        */}
+        {!enderecoSeguro && (
+          <p className="mt-4 max-w-xs text-center text-[11px] leading-relaxed tracking-wide text-movic-neon/60">
+            O microfone só funciona em endereço com cadeado. Este ainda não
+            tem — por isso o botão não abre a escuta, principalmente no
+            celular. Falta o endereço seguro do Zeus.
+          </p>
+        )}
+
+        {enderecoSeguro && !suportado && (
           <p className="mt-4 text-center text-[11px] tracking-wide text-movic-neon/50">
             Este navegador nao reconhece fala. Use Chrome ou Edge.
           </p>

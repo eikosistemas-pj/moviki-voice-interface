@@ -45,6 +45,9 @@ Nunca em arquivo dentro do repositório. Na VPS, como variável de ambiente
 | `ZEUS_GITHUB_TOKEN` | **as mãos.** Sem ele o Zeus conversa mas não trabalha |
 | `ZEUS_OFICINA` | onde ele monta o trabalho. Padrão `/root/eikosistemas/.oficina` |
 | `ZEUS_MAX_VOLTAS` | quantas leituras antes de desistir. Padrão 12 |
+| `ZEUS_PAINEL_ORIGEM` | **a janela do CRM.** O endereço do painel do dono, e só ele. Vazio = ninguém de fora pergunta |
+| `ZEUS_GASTO` | o caderno de despesa. Padrão `./dados/gasto.json` |
+| `ZEUS_DOLAR` | a cotação do dólar, para o custo aparecer em reais. Padrão 5,60 |
 
 ### Sobre o `ZEUS_CONFERE_VOZ`
 
@@ -113,6 +116,48 @@ pedido — a Anthropic cobra cerca de um décimo por texto repetido que ela já
 viu. O retrato, que muda, fica de fora do cache, mas é curto. O servidor
 registra em cada resposta quantos tokens vieram do cache; se esse número zerar,
 alguém mexeu no começo do prompt e a conta vai dobrar em silêncio.
+
+### A janela do CRM (`ZEUS_PAINEL_ORIGEM`)
+
+O painel do dono tem uma aba CRM que mostra os agentes lado a lado. Para
+desenhar a linha do Zeus, ela consulta `GET /api/zeus/painel` — uma rota de
+**leitura**: não liga nada, não desliga nada, não gasta chamada paga. Só conta
+o que já estava guardado.
+
+Três coisas seguram essa janela:
+
+1. **Ela fica atrás do crachá**, igual ao resto. O retrato diz se o turno está
+   aberto, e turno aberto quer dizer que o Paulo não está olhando — é
+   exatamente o que interessa a quem quer entrar.
+2. **A origem é nominal.** `ZEUS_PAINEL_ORIGEM` recebe o endereço do painel do
+   dono e mais nenhum. `*` é recusado com todas as letras, mesmo escrito de
+   propósito: liberaria qualquer página da internet a perguntar em nome do
+   Paulo enquanto o crachá dele estivesse valendo.
+3. **Vazio quer dizer fechado.** Sem a variável, ninguém de fora consulta — a
+   tela do próprio Zeus continua funcionando igual.
+
+```
+ZEUS_PAINEL_ORIGEM=https://painel.moviki.com.br
+```
+
+O formato do retrato está em `FORMATO-DO-AGENTE.md`, na raiz do repositório.
+Ele é o mesmo para os quatro agentes, de propósito.
+
+### O custo em reais (`ZEUS_DOLAR`)
+
+O Paulo decidiu que o CRM mostra o gasto do agente em **reais**. A conta sai
+de `servidor/precos.js` (preço por modelo, em dólar) vezes a cotação do
+`ZEUS_DOLAR`, e vai sendo anotada em `servidor/gasto.js` a cada chamada paga —
+conversa, análise, trabalho, busca e ronda.
+
+Duas coisas para não esquecer:
+
+- **A tabela de preço envelhece.** Quando a Anthropic mudar o preço, mexe num
+  lugar só: `servidor/precos.js`.
+- **Modelo fora da tabela não ganha preço chutado.** A chamada entra como
+  "sem preço" e o painel mostra o total como incompleto. Número inventado num
+  painel de custo é o mesmo defeito do Zeus dizendo que está trabalhando
+  quando não está.
 
 ## Subir
 

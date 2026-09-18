@@ -40,6 +40,7 @@
 
 import { buscar, ler, listar } from './trabalho.js'
 import { REPOS_PERMITIDOS } from './maos.js'
+import * as gasto from './gasto.js'
 
 const MODELO = process.env.ZEUS_MODELO_ANALISE || 'claude-opus-5'
 
@@ -273,6 +274,14 @@ export async function analisar({ repo, pergunta, patrulha = false }) {
     }
 
     const dados = await resp.json()
+    // Cada volta do laco e uma chamada paga. Anotar volta a volta, e nao so a
+    // ultima, e o que faz a coluna de custo do CRM bater com a fatura: uma
+    // analise que gastou oito voltas custou oito voltas.
+    gasto.anotar({
+      tipo: patrulha ? 'patrulha' : 'analise',
+      modelo: MODELO,
+      ...gasto.doUsage(dados.usage),
+    })
     messages.push({ role: 'assistant', content: dados.content })
 
     const chamadas = (dados.content || []).filter((b) => b.type === 'tool_use')

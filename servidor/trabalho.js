@@ -41,6 +41,7 @@ import path from 'node:path'
 import { podeMexer, REPOS_PERMITIDOS } from './maos.js'
 import { espelhar, temEspelho } from './olhos.js'
 import { aplicarTroca, nomearRamo, validar } from './proposta.js'
+import * as gasto from './gasto.js'
 
 /** Onde ele LE para trabalhar: o espelho, que e so leitura. */
 const ESPELHO = process.env.ZEUS_ESPELHO || '/root/eikosistemas'
@@ -607,6 +608,12 @@ export async function montarProposta({ repo, ordem }) {
     }
 
     const dados = await resp.json()
+    // O TRABALHO E O CARO. Modelo forte, esforco xhigh e ate quatorze voltas
+    // remandando o codigo ja lido: uma ordem falada de dez segundos pode
+    // custar mais que um dia inteiro de conversa. Se so a conversa entrasse
+    // na conta, a coluna de custo do CRM mostraria centavos enquanto a fatura
+    // mostra outra coisa.
+    gasto.anotar({ tipo: 'trabalho', modelo: MODELO, ...gasto.doUsage(dados.usage) })
     messages.push({ role: 'assistant', content: dados.content })
 
     const chamadas = (dados.content || []).filter((b) => b.type === 'tool_use')

@@ -347,8 +347,31 @@ vai enxergar o Zeus, a ordem de construção, e as três perguntas que continuam
 sendo dele.
 
 > **O CRM se constrói no `moviki-app`, não aqui.** O que este repositório
-> precisa entregar é uma rota de leitura (`/api/zeus/painel`) com o estado do
-> Zeus — e ele já tem tudo que ela precisa em `servidor/estado.js`.
+> precisava entregar era uma rota de leitura com o estado do Zeus.
+
+**A parte deste repositório está feita — 18/09/2026, fim do dia:**
+
+| O quê | Onde |
+|---|---|
+| O formato comum dos quatro agentes | [`FORMATO-DO-AGENTE.md`](./FORMATO-DO-AGENTE.md) |
+| O retrato do Zeus nesse formato | `servidor/painel.js` |
+| A rota que o painel do dono consulta | `GET /api/zeus/painel`, atrás do crachá |
+| O custo em reais, que não existia | `servidor/precos.js` + `servidor/gasto.js` |
+
+Duas coisas para o Paulo, quando publicar:
+
+1. **Uma linha no `zeus.env`:** `ZEUS_PAINEL_ORIGEM=https://painel.moviki.com.br`
+   — o endereço do painel do dono, e só ele. Sem ela nada quebra; a aba CRM é
+   que não consegue perguntar. `*` é recusado de propósito.
+2. **`ZEUS_DOLAR`**, se a cotação estiver longe de R$ 5,60. É o único número da
+   conta de custo que muda sozinho.
+
+> **O custo saiu do escuro.** O Zeus contava *chamadas* — o teto do dia. Uma
+> conversa de duas frases e um trabalho de código contavam 1 cada e custam
+> vinte vezes um do outro. Agora cada chamada paga (conversa, análise,
+> trabalho, busca e ronda) vira centavo anotado, e a tabela de preço mora num
+> arquivo só porque envelhece. Modelo fora da tabela **não ganha preço
+> chutado**: entra como "sem preço" e o total aparece como incompleto.
 
 ## 5. Pendências — em ordem de importância
 

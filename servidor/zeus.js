@@ -48,8 +48,19 @@ import { montarProposta } from './trabalho.js'
 import { analisar } from './analise.js'
 import { pesquisar } from './busca.js'
 import * as patrulha from './patrulha.js'
+import * as painel from './painel.js'
 
 const PORTA = Number(process.env.ZEUS_PORTA || 8124)
+
+/**
+ * QUANDO ESTE PROCESSO SUBIU.
+ *
+ * O CRM pergunta "esta de pe desde quando?", e a resposta honesta e esta: o
+ * Zeus nao sabe o que houve antes do ultimo restart. Numa VPS de 2 GB, que
+ * mata processo por falta de memoria, saber que ele subiu ha tres minutos e
+ * justamente o que explica o resto da tela.
+ */
+const SUBIU_EM = Date.now()
 const LIMITE_DIA = Number(process.env.ZEUS_LIMITE_DIA || 200)
 
 /**
@@ -544,6 +555,46 @@ async function tratarEntrada(req, res) {
   return responderJSON(res, 200, { cracha: r.cracha })
 }
 
+/**
+ * A JANELA DO CRM — a unica rota do Zeus que o painel do dono consulta.
+ *
+ * TRES CUIDADOS, E NENHUM E OPCIONAL (ESTADO-DO-CRM.md, secao 4):
+ *
+ * 1. E DE LEITURA. Nao liga nem desliga nada, nao abre Pull Request, nao
+ *    gasta chamada paga. Ela so conta o que ja estava guardado. Ligar e
+ *    desligar agente e escrita, e escrita merece rota propria, com registro
+ *    de quem mandou e por que.
+ * 2. ATRAS DO CRACHA. O retrato diz o que o Zeus esta fazendo, quanto gastou
+ *    e se o turno esta aberto — e turno aberto quer dizer que o Paulo nao
+ *    esta olhando. E exatamente o que interessa a quem quer entrar.
+ * 3. A ORIGEM E NOMINAL. So o endereco do painel do dono, nunca `*`.
+ */
+function retratoDoPainel(req, res) {
+  const permitida = painel.origemLiberada(req.headers.origin)
+  if (permitida) {
+    res.setHeader('Access-Control-Allow-Origin', permitida)
+    // Sem isto, um intermediario guarda a resposta liberada para uma origem e
+    // entrega para outra.
+    res.setHeader('Vary', 'Origin')
+  }
+
+  // O navegador pergunta antes de perguntar. Responder aqui evita que a
+  // primeira consulta do painel morra sem explicacao nenhuma.
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    res.setHeader('Access-Control-Max-Age', '600')
+    res.writeHead(permitida ? 204 : 403)
+    return res.end()
+  }
+
+  const cracha = new URL(req.url, 'http://x').searchParams.get('cracha')
+  if (!porta.vale(cracha)) {
+    return responderJSON(res, 401, { precisaEntrar: true })
+  }
+
+  return responderJSON(res, 200, painel.montar({ subiuEm: SUBIU_EM }))
+}
+
 const servidor = http.createServer(async (req, res) => {
   try {
     if (req.method === 'POST' && req.url === '/api/zeus/entrar') {
@@ -586,6 +637,12 @@ const servidor = http.createServer(async (req, res) => {
       estado.limparChamados(atual)
       estado.gravar(atual)
       return responderJSON(res, 200, { fala: falas.join(' '), links: aviso.links })
+    }
+    if (
+      (req.method === 'GET' || req.method === 'OPTIONS') &&
+      req.url.startsWith('/api/zeus/painel')
+    ) {
+      return retratoDoPainel(req, res)
     }
     if (req.method === 'GET' && req.url === '/api/zeus/vivo') {
       // Sinal de vida, sem contar nada. Serve para o instalador conferir que

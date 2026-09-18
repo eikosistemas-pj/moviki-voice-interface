@@ -53,6 +53,7 @@
 // sair, cortar no meio seria trocar uma resposta lenta por meia resposta.
 
 import { criarFluxoFala } from '../lib/fluxoFala.js'
+import * as gasto from './gasto.js'
 
 const MODELO_PADRAO = 'claude-haiku-4-5'
 const TIMEOUT_PADRAO = 30000
@@ -399,7 +400,7 @@ export async function pensarEmFluxo({ system, historico, falaNova, aoPedaco }) {
   let primeiraPalavraEm = null
   const fluxo = criarFluxoFala()
   let inteiro = ''
-  const contas = { entrada: 0, cache: 0, saida: 0 }
+  const contas = { entrada: 0, cache: 0, criacao: 0, saida: 0 }
 
   const entregar = (pedacos) => {
     for (const p of pedacos) {
@@ -437,6 +438,7 @@ export async function pensarEmFluxo({ system, historico, falaNova, aoPedaco }) {
         const u = evento.message?.usage || {}
         contas.entrada = u.input_tokens || 0
         contas.cache = u.cache_read_input_tokens || 0
+        contas.criacao = u.cache_creation_input_tokens || 0
       } else if (evento.type === 'message_delta') {
         contas.saida = evento.usage?.output_tokens || contas.saida
       } else if (evento.type === 'error') {
@@ -456,6 +458,12 @@ export async function pensarEmFluxo({ system, historico, falaNova, aoPedaco }) {
         `resposta inteira em ${((Date.now() - comecou) / 1000).toFixed(1)}s — ` +
         `${contas.entrada} tokens novos, ${contas.cache} do cache, ${contas.saida} de resposta`
     )
+
+    // A conta da conversa vai para o caderno de despesa: e ela que vira a
+    // coluna "gastou quanto hoje" do CRM, em reais. Anotar aqui, e nao no
+    // fim, garante que resposta cortada no meio tambem entre na conta — ela
+    // foi paga do mesmo jeito.
+    gasto.anotar({ tipo: 'conversa', modelo, ...contas })
 
     const texto = inteiro.trim()
     return texto ? { ok: true, texto } : { ok: false, texto: '' }

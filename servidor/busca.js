@@ -34,6 +34,8 @@
 // veio o que ele falou. Numero solto, sem fonte, dito com voz de comando, vira
 // decisao errada do Paulo — que e o mesmo estrago de um problema inventado.
 
+import * as gasto from './gasto.js'
+
 const MODELO = process.env.ZEUS_MODELO_BUSCA || 'claude-opus-5'
 
 /** Quantas buscas por pergunta. Cada uma e paga. */
@@ -173,6 +175,17 @@ export async function pesquisar({ pergunta }) {
     const quantasBuscas = (dados.content || []).filter(
       (b) => b.type === 'server_tool_use' || b.type === 'web_search_tool_result'
     ).length
+    // A busca NAO e cobrada em token: e por pesquisa feita. Contar so os
+    // tokens aqui faria o pedaco que mais gasta sem ninguem pedir aparecer
+    // quase de graca no painel do CRM.
+    gasto.anotar({
+      tipo: 'busca',
+      modelo: MODELO,
+      ...gasto.doUsage(dados.usage),
+      buscas: (dados.content || []).filter(
+        (b) => b.type === 'server_tool_use' && b.name === 'web_search'
+      ).length,
+    })
     console.log(
       `[zeus] busca "${String(pergunta).slice(0, 40)}" volta ${volta + 1}: ` +
         `${quantasBuscas} bloco(s) de pesquisa, parou por "${dados.stop_reason}" ` +

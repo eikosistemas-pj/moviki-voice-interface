@@ -76,3 +76,70 @@ test('o aviso de trabalho continua falando de Pull Request', () => {
   const fala = fraseDeAviso({ ok: true, ordem: 'muda a cor', link: 'https://x' })
   assert.match(fala, /Pull Request/)
 })
+
+// ---------------------------------------------------------------------------
+// ONDE O PAULO ESTA FALANDO
+// ---------------------------------------------------------------------------
+//
+// 18/09/2026: ele pediu "muda a cor do BOTAO da newsletter na pagina principal
+// da empresa". O Zeus foi procurar newsletter no repositorio do ATENDENTE DO
+// WHATSAPP, nao achou, e desistiu dizendo que a newsletter nao existia.
+//
+// Causa: a expressao do moviki-ai abria com \b e nao fechava, entao "bot"
+// casava dentro de "BOTao". Dois caracteres de expressao regular custaram uma
+// tarefa inteira.
+
+test('"botao" nunca mais cai no atendente do WhatsApp', () => {
+  assert.equal(
+    repoDoAssunto('muda a cor do botao da newsletter na pagina principal da empresa'),
+    'moviki'
+  )
+  assert.equal(repoDoAssunto('muda a cor do botao do painel do lojista'), 'moviki-app')
+  assert.equal(repoDoAssunto('muda o botao do site'), 'moviki')
+  // E o atendente de verdade continua sendo o atendente.
+  assert.equal(repoDoAssunto('muda a resposta do bot'), 'moviki-ai')
+  assert.equal(repoDoAssunto('muda o texto do atendente'), 'moviki-ai')
+})
+
+test('o Paulo fala do site como dono, nao como programador', () => {
+  for (const f of [
+    'muda o rodape do site',
+    'altera a home da empresa',
+    'muda a pagina principal',
+    'muda o texto da newsletter',
+    'altera a pagina da empresa',
+  ]) {
+    assert.equal(repoDoAssunto(f), 'moviki', `"${f}" devia ser o site`)
+  }
+})
+
+test('cada repositorio continua achando o que e dele', () => {
+  const casos = [
+    ['muda o texto do painel do lojista', 'moviki-app'],
+    ['muda o cardapio', 'moviki-app'],
+    ['muda o material de apoio do parceiro', 'moviki-app'],
+    ['muda a comissao', 'moviki-robo'],
+    ['muda o aviso de inadimplencia', 'moviki-robo'],
+    ['muda o post do instagram', 'moviki-assistente-social'],
+  ]
+  for (const [f, esp] of casos) assert.equal(repoDoAssunto(f), esp, f)
+})
+
+test('sem saber onde e, ele continua devolvendo null e perguntando', () => {
+  // Chutar o repositorio seria pior: Pull Request no lugar errado que o Paulo
+  // tem que ler para descobrir que esta errado.
+  assert.equal(repoDoAssunto('muda aquilo la'), null)
+  assert.equal(repoDoAssunto('arruma aquele negocio'), null)
+})
+
+test('a pergunta do trabalho e falada, nao vira "nao deu" seco', () => {
+  // Era o ida-e-volta que devolvia para o Paulo o trabalho de lembrar.
+  const fala = fraseDeAviso({
+    ok: false,
+    ordem: 'muda a cor do botao da newsletter',
+    pergunta: 'Paulo, nao achei nenhuma newsletter no site. Voce quer dizer o formulario de contato do rodape?',
+    erros: ['...'],
+  })
+  assert.match(fala, /nao achei nenhuma newsletter/)
+  assert.doesNotMatch(fala, /Nao consegui fazer/)
+})

@@ -4,7 +4,7 @@ import BotaoMicrofone from './components/BotaoMicrofone'
 import { useVozZeus } from './hooks/useVozZeus'
 import { useEscuta } from './hooks/useEscuta'
 import { detectarHumor } from './lib/humor'
-import { ESTADOS, HUMORES } from './config/voz'
+import { ENDPOINT_CEREBRO, ESTADOS, HUMORES, TOKEN_ZEUS } from './config/voz'
 
 /**
  * ZEUS — painel de voz.
@@ -45,10 +45,13 @@ export default function App() {
   /**
    * Onde o cerebro entra.
    *
-   * Hoje devolve uma resposta de exemplo: esta interface e a camada
-   * visual, e o atendente de verdade mora no `moviki-ai`. Trocar este
-   * corpo por um fetch para `/api/atendimento` liga os dois — o humor
-   * continua saindo do texto, sem mudanca aqui.
+   * A tela NAO decide nada: manda o que foi falado para o servidor do Zeus
+   * (servidor/zeus.js, na VPS) e fala o que voltar. A trava do turno vive la,
+   * porque o que roda no navegador qualquer um edita com o console aberto.
+   *
+   * O token e so um tapa-buraco de porta — ele viaja para o navegador e
+   * qualquer um consegue ler no codigo da pagina. Quem segura o prejuizo de
+   * verdade e o teto diario, do lado do servidor.
    */
   const responder = useCallback(
     async (textoDaPessoa) => {
@@ -56,10 +59,17 @@ export default function App() {
       setHumor(HUMORES.NEUTRO)
 
       try {
-        await new Promise((r) => setTimeout(r, 600))
+        const r = await fetch(ENDPOINT_CEREBRO, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ texto: textoDaPessoa, token: TOKEN_ZEUS }),
+        })
+
+        // Mesmo em 401 ou 400 o servidor manda uma frase para o Zeus falar:
+        // robo mudo nao explica o que houve, e ai a culpa sobra para a voz.
+        const dados = await r.json().catch(() => null)
         const resposta =
-          `Ainda nao estou ligado ao atendente do Moviki. ` +
-          `Voce disse: ${textoDaPessoa}`
+          dados?.resposta || 'Nao consegui falar com o meu servidor agora.'
 
         // Humor definido ANTES de falar: a expressao precisa estar no
         // rosto no instante em que a voz comeca, nao depois.
@@ -69,6 +79,7 @@ export default function App() {
       } catch {
         setPensando(false)
         setHumor(HUMORES.FIRMEZA)
+        await falar('Nao consegui falar com o meu servidor agora.')
       }
     },
     [falar]
@@ -91,6 +102,21 @@ export default function App() {
   const humorVisivel =
     humorForcado || (estado === ESTADOS.ERRO ? HUMORES.FIRMEZA : humor)
 
+  /**
+   * O UNICO lugar do sistema que liga o microfone.
+   *
+   * REGRA DO PAULO (18/09/2026): o Zeus nao aciona o microfone sozinho. Quem
+   * abre o microfone e ele, com o dedo, quando quer falar.
+   *
+   * Nao existe escuta continua, nao existe "volta a ouvir depois de
+   * responder", nao existe palavra de despertar. A melhoria obvia que alguem
+   * vai querer fazer um dia — reabrir a escuta sozinho quando o Zeus termina
+   * de falar — e justamente a que NAO pode ser feita: um robo com o
+   * microfone na mao e um microfone aberto na casa do dono.
+   *
+   * O `continuous = false` em useEscuta.js e a outra metade dessa garantia:
+   * a escuta morre sozinha no fim da frase.
+   */
   const aoTocarMicrofone = () => {
     if (falando || carregando) {
       parar()

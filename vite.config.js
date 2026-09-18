@@ -16,12 +16,22 @@ export default defineConfig({
         target: 'http://127.0.0.1:8123',
         changeOrigin: true,
       },
+      // /api/zeus vai para o cerebro (servidor/zeus.js), ao lado da voz.
+      '/api/zeus': {
+        target: 'http://127.0.0.1:8124',
+        changeOrigin: true,
+      },
     },
   },
   preview: {
     proxy: {
       '/api/voz': {
         target: 'http://127.0.0.1:8123',
+        changeOrigin: true,
+      },
+      // /api/zeus vai para o cerebro (servidor/zeus.js), ao lado da voz.
+      '/api/zeus': {
+        target: 'http://127.0.0.1:8124',
         changeOrigin: true,
       },
     },

@@ -84,11 +84,20 @@ decisao de escopo.
   suporta e a interface avisa.
 - **Audio** so toca apos a primeira interacao na pagina (autoplay).
 
-## Falta ligar ao cerebro
+## O cerebro
 
-`responder()` em `App.jsx` devolve resposta de exemplo. Trocar por um fetch
-para `/api/atendimento` (no `moviki-ai`) liga os dois — o humor continua
-saindo do texto, sem mudanca na interface.
+`responder()` em `App.jsx` manda o que foi falado para `/api/zeus` — o
+servidor do Zeus, que roda na VPS ao lado da voz. Ver `servidor/README.md`.
+
+O cerebro **nao** e o `moviki-ai`: aquele e atendente de lojista, sabe de
+cardapio e cobranca. O Zeus e o posto de comando do Paulo, e precisa de outra
+cabeca.
+
+    React (responder)
+      -> POST /api/zeus         (proxy do Vite / Nginx)
+      -> servidor/zeus.js em :8124
+      -> entende a frase  -> passa pela TRAVA -> pensa (Claude)
+      -> texto de volta -> /api/voz -> o Zeus fala
 
 ## Producao
 
@@ -125,13 +134,25 @@ o console aberto — mesma razao pela qual dinheiro e status no Moviki sao
 sempre server-side. `lib/turno.js` e so a decisao: sem tela, sem banco e sem
 chave, para poder ser provada por teste.
 
+### O que ja esta pronto
+
+- A decisao da trava (`lib/turno.js`), com teste.
+- A leitura da frase (`servidor/comando.js`): o que o Paulo quis dizer, e se o
+  assunto e dos que nunca sao do robo.
+- O **registro do turno** e a **trilha**, em arquivo na VPS
+  (`servidor/estado.js`).
+- O **cerebro** (`servidor/cerebro.js`) e o servidor (`servidor/zeus.js`).
+
 ### O que ainda falta (nao esta no ar)
 
-- O **conferidor de voz** (reconhecer que quem falou foi o Paulo). Mora junto
-  do `zeus-voz` no servidor, que hoje nao esta em repositorio nenhum.
-- O **registro do turno** gravado (aberto/fechado, quando, por quem) e a
-  **trilha** do que o Zeus fez enquanto o Paulo estava fora.
-- O **caminho de comando**: o Zeus acionando de fato as cadeiras do time.
+- O **conferidor de voz** (reconhecer que quem falou foi o Paulo). Enquanto
+  ele nao existir, o turno abre so com a frase falada — decisao do Paulo em
+  18/09/2026 (`ZEUS_CONFERE_VOZ=0`), para ver o Zeus funcionando antes de
+  fechar a porta. Qualquer voz que diga a frase assume o posto, inclusive uma
+  gravacao. Os assuntos vedados continuam vedados assim mesmo.
+- O **caminho de comando**: o Zeus acionando de fato as cadeiras do time. Hoje
+  ele conversa, sabe o que e o Moviki e obedece a trava, mas nao poe ninguem
+  para trabalhar.
 
 ### Risco aceito, registrado
 

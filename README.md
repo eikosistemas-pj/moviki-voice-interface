@@ -95,3 +95,47 @@ saindo do texto, sem mudanca na interface.
 Sirva o build (`npm run build` -> `dist/`) pelo Nginx e passe `/api/voz`
 para `127.0.0.1:8123` no mesmo dominio, para evitar CORS. Com HTTPS, o
 microfone passa a funcionar.
+
+## A trava do Zeus (turno)
+
+O Zeus nao e atendente de cliente: e o posto de comando do Paulo. Ele aciona
+as cadeiras do time e, quando o Paulo nao esta, decide no lugar dele. A trava
+que separa uma coisa da outra vive em `lib/turno.js`, com teste em
+`lib/turno.test.js` (`npm run teste`).
+
+Como funciona, em uma frase por linha:
+
+- **Fora do turno** o Zeus so executa ordem direta. Nao decide nada.
+- **"Zeus, assuma daqui"** abre o turno — e so abre com a voz do Paulo
+  conferida. E o unico comando do sistema que exige prova.
+- **"Zeus, acabei de chegar"** fecha o turno. Fechar e sempre possivel, com ou
+  sem a voz conferida: se o conferidor falhar, o Paulo nao pode ficar trancado
+  do lado de fora enquanto o robo trabalha sozinho.
+- **O turno nao vence por tempo.** Decisao do Paulo em 18/09/2026: ele abre
+  quando sai e fecha quando chega, sem relogio no meio. Ha teste cravando isso.
+- **Ha assunto que nunca e do robo**, com turno aberto ou fechado: aprovar
+  Pull Request, preco, plano, dinheiro, seguranca, segredo, publicar nas redes
+  e apagar coisa. Sao as regras de ouro do mapa mestre.
+- **Na duvida ele para e deixa anotado.** Pedido que ninguem previu e negado.
+
+### Onde a trava roda
+
+No **servidor**, nunca na tela. O que roda no navegador qualquer um edita com
+o console aberto — mesma razao pela qual dinheiro e status no Moviki sao
+sempre server-side. `lib/turno.js` e so a decisao: sem tela, sem banco e sem
+chave, para poder ser provada por teste.
+
+### O que ainda falta (nao esta no ar)
+
+- O **conferidor de voz** (reconhecer que quem falou foi o Paulo). Mora junto
+  do `zeus-voz` no servidor, que hoje nao esta em repositorio nenhum.
+- O **registro do turno** gravado (aberto/fechado, quando, por quem) e a
+  **trilha** do que o Zeus fez enquanto o Paulo estava fora.
+- O **caminho de comando**: o Zeus acionando de fato as cadeiras do time.
+
+### Risco aceito, registrado
+
+Abertura de turno **so por voz**, por decisao do Paulo em 18/09/2026, contra a
+recomendacao de exigir tambem confirmacao na tela. Voz pode ser gravada: quem
+tiver um audio dele dizendo a frase de abertura assume o lugar dele. Reduz-se
+com conferencia de voz e frase que muda a cada vez; nao se elimina.

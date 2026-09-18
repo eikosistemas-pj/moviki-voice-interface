@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ajustarPronuncia } from '../../lib/pronuncia'
 import {
   ENDPOINT_TTS,
   IDIOMA_VOZ,
@@ -145,7 +146,11 @@ export function useVozZeus() {
           signal: controller.signal,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            texto,
+            // Passa pelo dicionario de pronuncia: nome de marca e palavra
+            // estrangeira vao escritos do jeito que devem SOAR, senao a voz
+            // le "Enterprise" pelas regras do portugues. Ninguem le este
+            // texto — ele so existe no caminho ate o motor de voz.
+            texto: ajustarPronuncia(texto),
             voz: VOZ_FIXA,
             idioma: IDIOMA_VOZ,
             velocidade: VELOCIDADE_VOZ,

@@ -78,6 +78,26 @@ confianca, e nome fora da lista cai no padrao em vez de ir para o servidor.
 Nao existe seletor na tela, por decisao de escopo: a escolha se faz uma vez e
 vira padrao no codigo.
 
+### Como ele pronuncia as palavras
+
+Com a voz certa no lugar, sobrou o outro erro: ela lia palavra estrangeira e
+nome de marca pelas regras do portugues. "Enterprise" saia "enterprí-se";
+"Moviki" saia com a silaba forte no lugar errado.
+
+`lib/pronuncia.js` conserta isso. Antes de virar audio, o texto passa por um
+dicionario e as palavras problematicas sao trocadas por uma grafia que SOA
+certo:
+
+    "o plano Enterprise"  ->  "o plano enterpráiz"
+
+Ninguem le esse texto — ele so existe no caminho ate o motor de voz, e a tela
+nao mostra transcricao.
+
+**Quando o Zeus errar uma palavra, ela entra na lista.** Isso e manutencao
+normal: nenhum motor de voz acerta nome de marca sem alguem ensinar. A ordem
+importa — termos de duas palavras vem antes dos de uma, e ha teste cravando
+isso.
+
 > Nota tecnica: a voz **nao** vem do `speechSynthesis` do navegador. Essa
 > API expoe apenas vozes instaladas no sistema de cada visitante (lista
 > vazia em Linux headless, diferente em cada Windows/Mac) e nao da acesso

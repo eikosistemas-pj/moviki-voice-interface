@@ -125,6 +125,7 @@ const FALAS = {
     'Nao tenho o token do GitHub aqui, entao nao consigo mexer no codigo. ' +
     'Rode o doutor na VPS que ele diz exatamente o que fazer.',
   ondeMexer: 'Nao entendi em qual parte do Moviki e para mexer. Me diga o painel, o site, o atendente ou as redes.',
+  ondeOlhar: 'Nao entendi qual parte do Moviki e para eu olhar. Me diga o painel, o site, o atendente ou as redes.',
 }
 
 /**
@@ -393,6 +394,19 @@ async function tratarFala(req, res) {
   // respondeu. Falso negativo aqui nao quebra nada.
   if (pareceAnalise(falado)) {
     const repo = repoDoAssunto(falado)
+    if (!repo) {
+      // PERGUNTAR ONDE, EM VEZ DE RESPONDER POR CIMA DO RETRATO.
+      //
+      // 18/09/2026: o Paulo pediu "analise o repositorio Moviki App" e, sem
+      // repositorio identificado, o pedido caia na conversa — que so tem o
+      // retrato (que ramo, que commit), nao o codigo. O Zeus respondia com
+      // honestidade que nao dava para analisar de verdade, e o Paulo ficava
+      // com a impressao de que a ferramenta de leitura estava quebrada.
+      //
+      // Ela nao estava: ele nunca chegou a abrir os olhos. Uma pergunta de uma
+      // frase resolve, e nao deixa duvida sobre o que aconteceu.
+      return responderFala(res, 200, FALAS.ondeOlhar, { turno: atual.turno })
+    }
     if (repo) {
       const id = estado.abrirTarefa(atual, { ordem: falado, repo, tipo: 'analise' })
       estado.anotar(atual, { o: 'analise', resumo: `fui olhar: ${falado.slice(0, 100)}` })

@@ -143,3 +143,45 @@ test('a pergunta do trabalho e falada, nao vira "nao deu" seco', () => {
   assert.match(fala, /nao achei nenhuma newsletter/)
   assert.doesNotMatch(fala, /Nao consegui fazer/)
 })
+
+// ---------------------------------------------------------------------------
+// O PAULO CHAMA OS REPOSITORIOS PELO NOME
+// ---------------------------------------------------------------------------
+//
+// 18/09/2026: ele pediu "analise o repositorio Moviki App" e o Zeus respondeu
+// que nao conseguia analisar de verdade, que a ferramenta de leitura estava
+// fora. A ferramenta estava inteira — o pedido nunca chegou nela, porque a
+// tabela de roteamento so conhecia palavras de negocio ("painel", "lojista") e
+// nao conhecia o NOME dos proprios repositorios.
+//
+// Perder a ordem por nao reconhecer o nome da coisa e o tipo de defeito que
+// faz o dono desistir de pedir.
+
+test('o repositorio chamado pelo nome e reconhecido', () => {
+  assert.equal(repoDoAssunto('analisar o repositorio Moviki App'), 'moviki-app')
+  assert.equal(repoDoAssunto('analise o moviki-app'), 'moviki-app')
+  assert.equal(repoDoAssunto('da uma olhada no moviki ai'), 'moviki-ai')
+  assert.equal(repoDoAssunto('olha o moviki assistente social'), 'moviki-assistente-social')
+  assert.equal(repoDoAssunto('analise o repositorio moviki'), 'moviki')
+})
+
+test('a transcricao de voz erra o nome, e isso e previsto', () => {
+  // Falando, "moviki" chega como "movic", "movik", "moviqui". Exigir a grafia
+  // exata seria exigir que ele digitasse.
+  for (const f of ['analise o movic app', 'analise o movik app', 'analise o moviqui app']) {
+    assert.equal(repoDoAssunto(f), 'moviki-app', f)
+  }
+})
+
+test('nome proprio ganha de palavra de negocio', () => {
+  // "o painel do moviki ai" e do atendente: o nome e mais especifico que o
+  // assunto.
+  assert.equal(repoDoAssunto('o painel do moviki ai'), 'moviki-ai')
+})
+
+test('os proibidos sao reconhecidos pelo nome, para a recusa ser a certa', () => {
+  // Estar na lista mesmo estando fora do alcance e o que faz a resposta ser
+  // "nao encosto nisso" em vez do vago "nao entendi onde e".
+  assert.equal(repoDoAssunto('analise o moviki robo'), 'moviki-robo')
+  assert.equal(repoDoAssunto('analise o moviki voice interface'), 'moviki-voice-interface')
+})

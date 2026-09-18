@@ -156,6 +156,38 @@ const ASSUNTOS = [
 // Uma tarefa inteira perdida por dois caracteres de expressao regular. Onde a
 // intencao e mesmo casar um PREFIXO (inadimplen -> inadimplente,
 // inadimplencia), isso fica separado e comentado.
+// ---------------------------------------------------------------------------
+// O PAULO TAMBEM CHAMA OS REPOSITORIOS PELO NOME. ISSO FALTAVA.
+// ---------------------------------------------------------------------------
+// 18/09/2026: ele pediu "analise o repositorio Moviki App" e o Zeus respondeu
+// que nao conseguia analisar de verdade. Nao era a ferramenta de leitura: e
+// que a lista abaixo so conhecia PALAVRAS DE NEGOCIO ("painel", "lojista") e
+// nao conhecia os nomes dos proprios repositorios. Sem repositorio
+// identificado, o pedido nem chegava a abrir os olhos — caia na conversa, que
+// so tem o retrato.
+//
+// Perder a ordem por nao reconhecer o nome da coisa e o tipo de defeito que
+// faz o dono desistir de pedir.
+//
+// A GRAFIA VEM DA TRANSCRICAO DE VOZ, NAO DO TECLADO. Falando, "moviki" chega
+// como "movic", "movik", "moviqui". Por isso o nome aceita variacao — e por
+// isso esta lista roda ANTES da de palavras de negocio: nome proprio e mais
+// especifico que assunto.
+const NOME = '(?:moviki|movike|moviqui|movik|movic)'
+
+const REPO_POR_NOME = [
+  ['moviki-app', new RegExp(`\\b${NOME}[\\s\\-]?(app|aplicativo|painel)\\b`)],
+  ['moviki-ai', new RegExp(`\\b${NOME}[\\s\\-]?(ai|i\\.?a\\.?|atendente)\\b`)],
+  ['moviki-robo', new RegExp(`\\b${NOME}[\\s\\-]?(robo|robot)\\b`)],
+  ['moviki-assistente-social', new RegExp(`\\b${NOME}[\\s\\-]?assistente[\\s\\-]?social\\b`)],
+  // O proprio Zeus. Entra na lista mesmo estando fora do alcance dele, para a
+  // recusa ser a certa ("nao mexo em mim mesmo") e nao o vago "nao entendi".
+  ['moviki-voice-interface', new RegExp(`\\b(${NOME}[\\s\\-]?voice|voice[\\s\\-]?interface)\\b`)],
+  // "o repositorio Moviki", sem sufixo, e o site publico.
+  ['moviki', new RegExp(`\\brepositorio ${NOME}\\b`)],
+  ['moviki', new RegExp(`\\b${NOME}\\b[\\s]*$`)],
+]
+
 const ONDE_MORA = [
   [
     'moviki-robo',
@@ -202,6 +234,10 @@ const SO_PODE_SER_O_SITE = /\b(da empresa|do moviki|rodape|cabecalho|topo do sit
 export function repoDoAssunto(frase) {
   const t = normalizar(frase)
   if (!t) return null
+  // Nome proprio primeiro: "moviki-app" e mais especifico que "painel".
+  for (const [repo, re] of REPO_POR_NOME) {
+    if (re.test(t)) return repo
+  }
   for (const [repo, re] of ONDE_MORA) {
     if (re.test(t)) return repo
   }

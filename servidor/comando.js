@@ -144,26 +144,68 @@ const ASSUNTOS = [
 // `moviki-robo` esta na lista DE PROPOSITO, mesmo estando fora do alcance
 // dele: assim, pedir mexida no dinheiro recebe a recusa certa ("nao encosto
 // no robo do dinheiro") em vez do vago "nao entendi onde e".
+// TODA ENTRADA AQUI FECHA COM \b, E ISSO NAO E DETALHE — 18/09/2026.
+//
+// As expressoes antigas abriam com \b e NAO fechavam. Resultado: "bot"
+// (do atendente) casava dentro de "BOTao".
+//
+// O Paulo pediu "muda a cor do BOTAO da newsletter na pagina principal" e o
+// Zeus foi procurar newsletter no repositorio do ATENDENTE DO WHATSAPP. Nao
+// achou, claro, e desistiu dizendo que a newsletter nao existia.
+//
+// Uma tarefa inteira perdida por dois caracteres de expressao regular. Onde a
+// intencao e mesmo casar um PREFIXO (inadimplen -> inadimplente,
+// inadimplencia), isso fica separado e comentado.
 const ONDE_MORA = [
-  ['moviki-robo', /\b(dinheiro|assinatura|assinaturas|asaas|comissao|comissoes|saque|saques|cobranca|webhook|trial|fatura|inadimplen)/],
-  ['moviki-ai', /\b(atendente|atendimento|bot|robo de conversa|caixa de mensagens|vik|whatsapp)/],
-  ['moviki-assistente-social', /\b(instagram|facebook|rede social|redes sociais|post|posts|reel|reels|feed|calendario de posts)/],
-  ['moviki-app', /\b(painel|lojista|parceiro|videoaula|videoaulas|aula|aulas|cardapio|cadastro|material de apoio|cracha|eikoadm)/],
-  ['moviki', /\b(site|vitrine|pagina publica|pagina de venda|landing|seo|sitemap|termos|live publica|mapa de negocios)/],
+  [
+    'moviki-robo',
+    /\b(dinheiro|asaas|comissao|comissoes|saque|saques|cobranca|cobrancas|webhook|trial|fatura|faturas|assinatura|assinaturas|estorno|reembolso|repasse)\b/,
+  ],
+  // Prefixo de proposito: inadimplente, inadimplencia.
+  ['moviki-robo', /\binadimplen/],
+
+  [
+    'moviki-ai',
+    /\b(atendente|atendentes|atendimento|bot|bots|chatbot|vik|whatsapp|zap)\b|\b(robo de conversa|caixa de mensagens)\b/,
+  ],
+
+  [
+    'moviki-assistente-social',
+    /\b(instagram|facebook|post|posts|postagem|postagens|reel|reels|feed)\b|\b(rede social|redes sociais|calendario de posts)\b/,
+  ],
+
+  [
+    'moviki-app',
+    /\b(painel|paineis|lojista|lojistas|parceiro|parceiros|videoaula|videoaulas|aula|aulas|cardapio|cardapios|cadastro|cadastros|cracha|crachas|eikoadm)\b|\b(material de apoio)\b/,
+  ],
+
+  // O SITE PUBLICO. A lista estava curta demais: o Paulo falou "pagina
+  // principal da empresa" e nada casava — nem "pagina principal", nem
+  // "empresa", nem "newsletter". Ele fala do site como um dono fala: "a
+  // pagina da empresa", "a home", "o topo do site".
+  [
+    'moviki',
+    /\b(site|vitrine|landing|home|homepage|newsletter|seo|sitemap|termos|privacidade|institucional)\b|\b(pagina publica|pagina principal|pagina inicial|pagina da empresa|pagina de venda|live publica|mapa de negocios)\b/,
+  ],
 ]
 
 /**
- * De qual repositorio o Paulo esta falando, ou null se nao der para saber.
+ * Ultimo recurso: palavras genericas que so podem ser o site publico.
  *
- * A ordem da lista importa: "o atendente do painel" e do moviki-ai, nao do
- * moviki-app, embora contenha a palavra "painel".
+ * Fica separado e roda DEPOIS de tudo, porque "a pagina da empresa" e vago o
+ * bastante para atropelar os especificos se estivesse na lista principal. Mas
+ * devolver o site e melhor que devolver nada: errar aqui custa um Pull Request
+ * no lugar errado, que ele recusa; nao errar custa a ordem inteira.
  */
+const SO_PODE_SER_O_SITE = /\b(da empresa|do moviki|rodape|cabecalho|topo do site|menu do site|banner)/
+
 export function repoDoAssunto(frase) {
   const t = normalizar(frase)
   if (!t) return null
   for (const [repo, re] of ONDE_MORA) {
     if (re.test(t)) return repo
   }
+  if (SO_PODE_SER_O_SITE.test(t)) return 'moviki'
   return null
 }
 

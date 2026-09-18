@@ -40,6 +40,13 @@ export function fraseDeAviso(tarefa) {
     return `Olhei o que voce pediu sobre ${tarefa.ordem} e nao consegui fechar uma resposta. ${porque}`
   }
 
+  // PERGUNTA: ele procurou, nao achou, e quer saber onde e.
+  //
+  // Sai pela mesma boca do aviso de tarefa pronta — entao o Paulo OUVE sozinho,
+  // sem precisar voltar e perguntar como foi. Era esse ida-e-volta que
+  // devolvia para ele o trabalho de lembrar.
+  if (!tarefa.ok && tarefa.pergunta) return tarefa.pergunta
+
   if (tarefa.ok) {
     // O link nao e falado: soletrar endereco em voz alta e tortura. Ele fica
     // na resposta escrita, para a tela mostrar ou o Paulo abrir depois.

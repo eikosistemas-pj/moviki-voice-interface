@@ -122,6 +122,22 @@ const FERRAMENTAS = [
     },
   },
   {
+    name: 'perguntar',
+    description:
+      'Use quando voce procurou de verdade e NAO achou, ou quando achou mais de um lugar possivel e errar sairia caro. O Paulo ouve a pergunta em voz alta e responde. So use depois de ter tentado buscar com outras palavras.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        pergunta: {
+          type: 'string',
+          description:
+            'Uma frase, falada, direta. Diga o que voce ja tentou e o que precisa saber. Sem codigo, sem nome de arquivo soletrado.',
+        },
+      },
+      required: ['pergunta'],
+    },
+  },
+  {
     name: 'propor',
     description:
       'Entrega a alteracao. Para cada arquivo, diga o TRECHO EXATO a procurar e o trecho que entra no lugar. Nunca mande o arquivo inteiro.',
@@ -183,7 +199,22 @@ mestre. Nao mexe no robo do dinheiro. Se a ordem exigir isso, nao proponha
 nada: explique numa frase que aquilo e do Paulo.
 
 Faca o MINIMO que resolve o pedido. Alteracao extra e revisao que o Paulo nao
-pediu e nao vai ler.`
+pediu e nao vai ler.
+
+NAO ACHOU DE PRIMEIRA? NAO DESISTA, E NAO INVENTE.
+A busca ignora maiuscula e acento, mas nao adivinha sinonimo. Antes de dizer
+que algo nao existe, tente:
+  - o texto como ele aparece na TELA para o usuario, nao o nome tecnico;
+  - uma palavra mais curta, ou so um pedaco dela;
+  - o termo em ingles E em portugues;
+  - "listar" a pasta para ver que arquivos existem.
+
+Se depois disso ainda nao achou, ou se achou VARIOS lugares possiveis e errar
+sairia caro, use "perguntar". O Paulo ouve a pergunta na hora e responde.
+
+PERGUNTAR E MELHOR QUE DESISTIR, E MUITO MELHOR QUE CHUTAR. Alterar o lugar
+errado gera um Pull Request que ele vai ter que ler para descobrir que esta
+errado — e isso gasta o tempo dele, que e o que voce existe para poupar.`
 }
 
 function dentroDoRepo(repo, relativo) {
@@ -220,10 +251,36 @@ async function arquivosDeTexto(repo, pasta = '', achados = []) {
   return achados
 }
 
-/** Acha o termo no repositorio, devolvendo arquivo, linha e a linha inteira. */
+/**
+ * Tira acento e baixa a caixa, para a busca nao depender de como foi escrito.
+ *
+ * ESTE ERA UM BUG, E CUSTOU UMA TAREFA INTEIRA — 18/09/2026
+ * O Paulo pediu a cor do botao da newsletter. O Zeus procurou "newsletter", o
+ * arquivo tinha "Newsletter", e a busca nao achou NADA — porque comparava
+ * letra por letra, com a caixa.
+ *
+ * Ele entao concluiu que a newsletter nao existia na pagina, e desistiu. Uma
+ * tarefa perdida por causa de uma letra maiuscula.
+ *
+ * O mesmo vale para acento: quem fala "cardapio" nao vai achar "cardápio".
+ */
+function achatar(texto) {
+  return String(texto)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+/**
+ * Acha o termo no repositorio, devolvendo arquivo, linha e a linha inteira.
+ *
+ * A COMPARACAO IGNORA CAIXA E ACENTO, mas o que volta e a linha ORIGINAL —
+ * ele precisa do texto exato para poder trocar depois.
+ */
 export async function buscar(repo, termo) {
   if (!termo || termo.length < 2) return '(me diga um texto maior para procurar)'
 
+  const alvoAchatado = achatar(termo)
   const lista = await arquivosDeTexto(repo)
   const achados = []
 
@@ -237,17 +294,26 @@ export async function buscar(repo, termo) {
     } catch {
       continue
     }
-    if (!texto.includes(termo)) continue
+    if (!achatar(texto).includes(alvoAchatado)) continue
 
     const linhas = texto.split('\n')
     for (let i = 0; i < linhas.length && achados.length < MAX_ACHADOS; i += 1) {
-      if (linhas[i].includes(termo)) {
+      if (achatar(linhas[i]).includes(alvoAchatado)) {
         achados.push(`${relativo}:${i + 1}: ${linhas[i].trim().slice(0, 160)}`)
       }
     }
   }
 
-  if (!achados.length) return '(nao achei esse texto em lugar nenhum)'
+  if (!achados.length) {
+    // Dizer so "nao achei" faz ele desistir. Dizer o que tentar faz ele tentar.
+    return (
+      `(nao achei "${termo}" em lugar nenhum do ${repo} — ja procurei ignorando ` +
+      'maiuscula e acento)\n' +
+      'TENTE AINDA: uma palavra mais curta ou um pedaco dela; o texto como ' +
+      'aparece na TELA para o usuario; o nome em ingles e em portugues; ou ' +
+      '"listar" a pasta para ver os arquivos. Só desista depois de tentar isso.'
+    )
+  }
   return achados.join('\n')
 }
 
@@ -431,6 +497,24 @@ export async function montarProposta({ repo, ordem }) {
     if (chamadas.length === 0) {
       const texto = (dados.content || []).find((b) => b.type === 'text')?.text
       return { ok: false, erros: [texto || 'nao consegui montar a alteracao'] }
+    }
+
+    // PERGUNTAR VALE MAIS QUE DESISTIR.
+    //
+    // 18/09/2026: ele nao achou a newsletter, concluiu que ela nao existia e
+    // parou. Nao existia porque ele estava procurando no repositorio errado —
+    // mas mesmo certo, "nao achei" devolvido como falha faz o Paulo pedir tudo
+    // de novo, do zero, adivinhando o que deu errado.
+    //
+    // Uma pergunta custa uma frase e resolve. Ela sai pela mesma boca do aviso
+    // de tarefa pronta, entao o Paulo OUVE sem precisar perguntar nada.
+    const duvida = chamadas.find((c) => c.name === 'perguntar')
+    if (duvida) {
+      const texto = String(duvida.input?.pergunta || '').trim()
+      if (texto) {
+        console.log(`[zeus] trabalho "${ordem.slice(0, 40)}" virou pergunta: ${texto}`)
+        return { ok: false, pergunta: texto, erros: [texto] }
+      }
     }
 
     const entrega = chamadas.find((c) => c.name === 'propor')

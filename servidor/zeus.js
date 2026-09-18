@@ -339,7 +339,9 @@ async function tratarFala(req, res) {
     // velha apagaria a conversa dele.
     montarProposta({ repo, ordem: falado })
       .then(async (r) => {
-        if (!r.ok) return { ok: false, erros: r.erros }
+        // A pergunta viaja junto: e ela que o Zeus vai FALAR, no lugar de um
+        // "nao deu" seco que obrigaria o Paulo a pedir tudo de novo.
+        if (!r.ok) return { ok: false, erros: r.erros, pergunta: r.pergunta }
         return executarProposta(r.proposta)
       })
       .then((r) => {

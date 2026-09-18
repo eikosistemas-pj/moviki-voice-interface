@@ -5,6 +5,7 @@ import TelaEntrada from './components/TelaEntrada'
 import { useVozZeus } from './hooks/useVozZeus'
 import { useEscuta } from './hooks/useEscuta'
 import { useEntrada } from './hooks/useEntrada'
+import { useAviso } from './hooks/useAviso'
 import { detectarHumor } from './lib/humor'
 import { ENDPOINT_CEREBRO, ESTADOS, HUMORES } from './config/voz'
 
@@ -101,6 +102,15 @@ export default function App() {
     if (falando) return ESTADOS.FALANDO
     return ESTADOS.PARADO
   }, [carregando, erroEscuta, erroVoz, falando, ouvindo, pensando])
+
+  // O Zeus chama o Paulo quando termina um trabalho, sem ele precisar
+  // perguntar. So com o microfone fechado e ele calado — robo que fala por
+  // cima do dono e robo que o dono desliga.
+  useAviso({
+    cracha: entrada.cracha,
+    ocupado: estado !== ESTADOS.PARADO,
+    falar,
+  })
 
   // Em erro o rosto assume firmeza: o proprio Zeus comunica o problema,
   // sem caixa de texto vermelha poluindo a tela.

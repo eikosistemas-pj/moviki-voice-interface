@@ -34,7 +34,11 @@ const ESPELHO = process.env.ZEUS_ESPELHO || '/root/eikosistemas'
 /** Quantas idas e vindas antes de desistir. */
 const MAX_VOLTAS = Number(process.env.ZEUS_MAX_VOLTAS || 12)
 
-const MODELO = process.env.ZEUS_MODELO || 'claude-opus-5'
+// Aqui NAO se economiza. Conversar rapido e uma coisa; ler codigo e escrever
+// alteracao que o Paulo vai aprovar e outra. O modelo forte fica onde o erro
+// custa caro — e trabalho corre por fora da conversa, entao o tempo dele nao
+// deixa ninguem esperando na frente da tela.
+const MODELO = process.env.ZEUS_MODELO_TRABALHO || 'claude-opus-5'
 
 const FERRAMENTAS = [
   {

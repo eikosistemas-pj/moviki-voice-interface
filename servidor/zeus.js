@@ -38,6 +38,7 @@ import { entender, pareceTrabalho, repoDoAssunto } from './comando.js'
 import { montarSystem, pensar } from './cerebro.js'
 import * as estado from './estado.js'
 import * as olhos from './olhos.js'
+import { montarAviso } from './aviso.js'
 import { criarPorta } from './porta.js'
 import { executarProposta } from './oficina.js'
 import { montarProposta } from './trabalho.js'
@@ -362,6 +363,28 @@ const servidor = http.createServer(async (req, res) => {
       // Serve para a tela saber se precisa pedir senha. Nao diz QUAL e a
       // senha nem se alguem esta dentro — so se a porta existe.
       return responderJSON(res, 200, { exigeSenha: porta.exigeSenha() })
+    }
+    if (req.method === 'GET' && req.url.startsWith('/api/zeus/novidade')) {
+      // A TELA PERGUNTA; O SERVIDOR NAO EMPURRA.
+      //
+      // Navegador nao tem campainha. Montar um cano aberto so para avisar
+      // seria peso a mais numa maquina de 2 GB — e esta rota nao pensa nem
+      // gasta chamada paga: ela so devolve o que ja estava guardado.
+      const cracha = new URL(req.url, 'http://x').searchParams.get('cracha')
+      if (!porta.vale(cracha)) {
+        return responderJSON(res, 401, { precisaEntrar: true })
+      }
+
+      const atual = estado.ler()
+      const prontas = estado.tarefasParaContar(atual)
+      if (!prontas.length) return responderJSON(res, 200, { fala: null })
+
+      const aviso = montarAviso(prontas)
+      // Marcadas assim que saem daqui: se a tela nao conseguir falar, e melhor
+      // perder um aviso do que o Zeus repetir a mesma novidade para sempre.
+      estado.marcarContadas(atual)
+      estado.gravar(atual)
+      return responderJSON(res, 200, aviso)
     }
     if (req.method === 'GET' && req.url === '/api/zeus/vivo') {
       // Sinal de vida, sem contar nada. Serve para o instalador conferir que

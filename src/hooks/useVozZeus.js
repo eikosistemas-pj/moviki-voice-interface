@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { partirFala } from '../../lib/partirFala'
 import { ajustarPronuncia } from '../../lib/pronuncia'
 import {
   ENDPOINT_TTS,
@@ -129,6 +130,61 @@ export function useVozZeus() {
     rafRef.current = requestAnimationFrame(passo)
   }, [])
 
+  /** Manda um pedaco para o servico de voz e devolve o audio pronto. */
+  const sintetizar = useCallback(async (pedaco, signal) => {
+    const resposta = await fetch(ENDPOINT_TTS, {
+      method: 'POST',
+      signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        // Passa pelo dicionario de pronuncia: nome de marca e palavra
+        // estrangeira vao escritos do jeito que devem SOAR, senao a voz le
+        // "Enterprise" pelas regras do portugues. Ninguem le este texto — ele
+        // so existe no caminho ate o motor de voz.
+        texto: ajustarPronuncia(pedaco),
+        voz: VOZ_FIXA,
+        idioma: IDIOMA_VOZ,
+        velocidade: VELOCIDADE_VOZ,
+      }),
+    })
+    if (!resposta.ok) {
+      const detalhe = await resposta.text().catch(() => '')
+      throw new Error(
+        `A voz do Zeus nao respondeu (${resposta.status}). ${detalhe.slice(0, 140)}`
+      )
+    }
+    return URL.createObjectURL(await resposta.blob())
+  }, [])
+
+  /** Toca um pedaco ate o fim. */
+  const tocar = useCallback(
+    (audio, url) =>
+      new Promise((resolve, reject) => {
+        audio.onended = resolve
+        audio.onerror = () => reject(new Error('O navegador nao conseguiu tocar o audio.'))
+        audio.src = url
+        audio.play().catch(reject)
+      }),
+    []
+  )
+
+  /**
+   * Fala a resposta inteira, em pedacos, comecando antes de ela estar pronta.
+   *
+   * POR QUE EM PEDACOS — 18/09/2026
+   * O Paulo reclamou da demora entre falar e ouvir. Boa parte dela nao era o
+   * cerebro pensando: era a voz. A maquina tem um processador so, e o Kokoro
+   * so devolve o audio quando termina a resposta INTEIRA — quatro frases
+   * levam quatro vezes mais que uma, e nesse tempo todo o Zeus fica mudo.
+   *
+   * Agora cada pedaco e sintetizado enquanto o anterior toca. O tempo ate a
+   * ULTIMA palavra e quase o mesmo; o tempo ate a PRIMEIRA cai para uma
+   * fracao. E e o tempo ate a primeira que a pessoa chama de "demora".
+   *
+   * UM DE CADA VEZ, de proposito: com um processador so, mandar todos os
+   * pedidos juntos faz os pedacos brigarem pela mesma CPU e todos chegarem
+   * mais tarde.
+   */
   const falar = useCallback(
     async (texto) => {
       if (!texto?.trim()) return
@@ -140,65 +196,53 @@ export function useVozZeus() {
       const controller = new AbortController()
       abortRef.current = controller
 
+      const pedacos = partirFala(texto)
+      if (!audioRef.current) audioRef.current = new Audio()
+      const audio = audioRef.current
+      const comAnalise = ligarAnalise(audio)
+
+      // A sintese do pedaco seguinte ja esta em andamento enquanto o atual
+      // toca. Se o Paulo mandar parar no meio, ela e abortada — e a rejeicao
+      // precisa de dono, senao o navegador reclama de promessa solta.
+      let emPreparo = sintetizar(pedacos[0], controller.signal)
+
       try {
-        const resposta = await fetch(ENDPOINT_TTS, {
-          method: 'POST',
-          signal: controller.signal,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            // Passa pelo dicionario de pronuncia: nome de marca e palavra
-            // estrangeira vao escritos do jeito que devem SOAR, senao a voz
-            // le "Enterprise" pelas regras do portugues. Ninguem le este
-            // texto — ele so existe no caminho ate o motor de voz.
-            texto: ajustarPronuncia(texto),
-            voz: VOZ_FIXA,
-            idioma: IDIOMA_VOZ,
-            velocidade: VELOCIDADE_VOZ,
-          }),
-        })
+        for (let i = 0; i < pedacos.length; i += 1) {
+          const url = await emPreparo
 
-        if (!resposta.ok) {
-          const detalhe = await resposta.text().catch(() => '')
-          throw new Error(
-            `A voz do Zeus nao respondeu (${resposta.status}). ${detalhe.slice(0, 140)}`
-          )
-        }
+          emPreparo =
+            i + 1 < pedacos.length
+              ? sintetizar(pedacos[i + 1], controller.signal)
+              : null
+          emPreparo?.catch(() => null)
 
-        const blob = await resposta.blob()
-        limparUrl()
-        const url = URL.createObjectURL(blob)
-        urlRef.current = url
+          if (controller.signal.aborted) {
+            URL.revokeObjectURL(url)
+            return
+          }
 
-        if (!audioRef.current) audioRef.current = new Audio()
-        const audio = audioRef.current
-        audio.src = url
+          if (i === 0) {
+            setCarregando(false)
+            setFalando(true)
+            medir(!comAnalise)
+          }
 
-        const comAnalise = ligarAnalise(audio)
-
-        audio.onended = () => {
-          pararMedicao()
-          setFalando(false)
+          urlRef.current = url
+          await tocar(audio, url)
           limparUrl()
         }
-        audio.onerror = () => {
-          pararMedicao()
-          setErro('O navegador nao conseguiu tocar o audio.')
-          setFalando(false)
-        }
 
-        setCarregando(false)
-        setFalando(true)
-        medir(!comAnalise)
-        await audio.play()
+        pararMedicao()
+        setFalando(false)
       } catch (e) {
-        if (e.name === 'AbortError') return
+        if (e.name === 'AbortError' || controller.signal.aborted) return
         pararMedicao()
         setErro(e.message)
         setFalando(false)
         setCarregando(false)
       }
     },
-    [ligarAnalise, limparUrl, medir, parar, pararMedicao]
+    [ligarAnalise, limparUrl, medir, parar, pararMedicao, sintetizar, tocar]
   )
 
   useEffect(

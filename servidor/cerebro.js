@@ -27,14 +27,32 @@
 // Quem quiser o forte tambem na conversa troca ZEUS_MODELO na VPS, sem novo
 // deploy. Vai ficar mais lento e mais caro; e escolha do Paulo.
 //
-// POR QUE `effort: low`
-// Isto e voz, nao relatorio. Resposta curta e rapida vale mais que raciocinio
-// longo. Em rota de conversa o esforco baixo segura a qualidade e derruba o
-// tempo de espera.
+// A RESPOSTA VEM EM FLUXO — 18/09/2026, segunda rodada
+//
+// Antes o servidor esperava a resposta INTEIRA da Anthropic para so entao
+// mandar para a tela, que so entao mandava para a voz, que so entao
+// sintetizava. Tres esperas em fila, uma depois da outra.
+//
+// Agora o texto chega palavra por palavra e cada FRASE PRONTA sai na hora
+// para a tela ir sintetizando. A ultima palavra chega no mesmo tempo de
+// antes; a PRIMEIRA chega numa fracao — e e a primeira que o Paulo chama de
+// "demora".
+//
+// O `effort` SAIU DAQUI, E NAO FOI ECONOMIA
+// A versao anterior mandava `output_config: { effort: 'low' }` junto com o
+// `claude-haiku-4-5`. O Haiku 4.5 NAO aceita esse parametro: a API responde
+// 400 e o Zeus fica sem resposta nenhuma — que e pior que lento, e mudo.
+// Agora o parametro so vai quando o modelo configurado aceita (ver
+// `aceitaEsforco`), e o Haiku roda sem ele, que e o certo: ele ja e rapido
+// e nao gasta raciocinio longo por padrao.
 //
 // TIMEOUT E OBRIGATORIO
 // Sem ele, uma chamada travada deixa o Zeus mudo de boca aberta, sem dizer
 // nem que deu errado. Melhor ele falar "nao consegui" do que emudecer.
+// Aqui o relogio conta ate a PRIMEIRA palavra: depois que o texto comecou a
+// sair, cortar no meio seria trocar uma resposta lenta por meia resposta.
+
+import { criarFluxoFala } from '../lib/fluxoFala.js'
 
 const MODELO_PADRAO = 'claude-haiku-4-5'
 const TIMEOUT_PADRAO = 30000
@@ -175,38 +193,117 @@ export function montarSystem({ turnoAberto, mapa, retrato, tarefas }) {
 }
 
 /**
- * Pergunta ao Claude.
+ * Modelos que aceitam `output_config.effort`.
  *
- *   historico: [{ papel: 'paulo'|'zeus', texto }]
- * Devolve a resposta em texto, ou null se algo falhou (nunca lanca: o Zeus
- * precisa conseguir dizer que deu errado).
+ * O Haiku 4.5 NAO aceita: mandar o parametro para ele devolve 400 e o Zeus
+ * fica sem resposta. Na duvida o parametro NAO vai — deixar de mandar custa
+ * no maximo um pouco de raciocinio a mais; mandar errado custa a resposta
+ * inteira.
  */
-export async function pensar({ system, historico, falaNova }) {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    console.error('[zeus] ANTHROPIC_API_KEY ausente na VPS.')
-    return null
-  }
+export function aceitaEsforco(modelo) {
+  return /^claude-(opus|sonnet|fable|mythos)-[5-9]/.test(String(modelo || ''))
+}
 
-  const modelo = process.env.ZEUS_MODELO || MODELO_PADRAO
-  const limite = Number(process.env.ZEUS_TIMEOUT || TIMEOUT_PADRAO)
-
+/** Monta o corpo do pedido. Separado so para o teste poder conferir. */
+export function montarPedido({ modelo, system, historico, falaNova }) {
   const messages = (historico || []).map((m) => ({
     role: m.papel === 'zeus' ? 'assistant' : 'user',
     content: String(m.texto || ''),
   }))
   messages.push({ role: 'user', content: String(falaNova || '') })
 
+  const corpo = {
+    model: modelo,
+    max_tokens: MAX_TOKENS,
+    system,
+    messages,
+    // O fluxo e o conserto da demora: sem ele o servidor segura a resposta
+    // inteira antes de deixar a voz comecar.
+    stream: true,
+  }
+  // Voz: resposta rapida vale mais que raciocinio longo — nos modelos que
+  // sabem o que fazer com essa instrucao.
+  if (aceitaEsforco(modelo)) corpo.output_config = { effort: 'low' }
+  return corpo
+}
+
+/**
+ * Le o fluxo de eventos da Anthropic e entrega os pedacos de texto.
+ *
+ * Formato SSE: blocos separados por linha em branco, cada linha util
+ * comecando com `data:`. So interessa o texto que sai; o resto e contabilidade.
+ */
+async function* lerEventos(corpo) {
+  const decodificador = new TextDecoder()
+  let sobra = ''
+  for await (const bruto of corpo) {
+    sobra += decodificador.decode(bruto, { stream: true })
+    const blocos = sobra.split('\n\n')
+    sobra = blocos.pop() || ''
+    for (const bloco of blocos) {
+      for (const linha of bloco.split('\n')) {
+        if (!linha.startsWith('data:')) continue
+        const dado = linha.slice(5).trim()
+        if (!dado || dado === '[DONE]') continue
+        try {
+          yield JSON.parse(dado)
+        } catch {
+          /* bloco partido pela metade: o proximo pedaco completa */
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Pergunta ao Claude e entrega a resposta EM FRASES, conforme elas ficam
+ * prontas.
+ *
+ *   historico: [{ papel: 'paulo'|'zeus', texto }]
+ *   aoPedaco:  chamada a cada frase pronta para falar
+ *
+ * Devolve `{ ok, texto }`. Nunca lanca: o Zeus precisa conseguir dizer que
+ * deu errado em vez de emudecer.
+ */
+export async function pensarEmFluxo({ system, historico, falaNova, aoPedaco }) {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) {
+    console.error('[zeus] ANTHROPIC_API_KEY ausente na VPS.')
+    return { ok: false, texto: '' }
+  }
+
+  const modelo = process.env.ZEUS_MODELO || MODELO_PADRAO
+  const limite = Number(process.env.ZEUS_TIMEOUT || TIMEOUT_PADRAO)
+
   const ctrl = new AbortController()
-  const t = setTimeout(() => {
+  // O relogio conta ate a PRIMEIRA palavra. Depois que o texto comecou a
+  // sair, abortar entregaria meia resposta — pior que uma resposta lenta.
+  let relogio = setTimeout(() => {
     try {
       ctrl.abort()
     } catch {
       /* ja abortado */
     }
   }, limite)
+  const desarmarRelogio = () => {
+    if (relogio) {
+      clearTimeout(relogio)
+      relogio = null
+    }
+  }
 
   const comecou = Date.now()
+  let primeiraPalavraEm = null
+  const fluxo = criarFluxoFala()
+  let inteiro = ''
+  const contas = { entrada: 0, cache: 0, saida: 0 }
+
+  const entregar = (pedacos) => {
+    for (const p of pedacos) {
+      if (primeiraPalavraEm === null) primeiraPalavraEm = Date.now() - comecou
+      aoPedaco?.(p)
+    }
+  }
 
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -216,42 +313,55 @@ export async function pensar({ system, historico, falaNova }) {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({
-        model: modelo,
-        max_tokens: MAX_TOKENS,
-        system,
-        messages,
-        // Voz: resposta rapida vale mais que raciocinio longo.
-        output_config: { effort: 'low' },
-      }),
+      body: JSON.stringify(montarPedido({ modelo, system, historico, falaNova })),
       signal: ctrl.signal,
     })
 
-    if (!resp.ok) {
-      const corpo = await resp.text().catch(() => '')
-      console.error('[zeus] API recusou:', resp.status, String(corpo).slice(0, 400))
-      return null
+    if (!resp.ok || !resp.body) {
+      const detalhe = await resp.text().catch(() => '')
+      console.error('[zeus] API recusou:', resp.status, String(detalhe).slice(0, 400))
+      return { ok: false, texto: '' }
     }
 
-    const dados = await resp.json()
+    for await (const evento of lerEventos(resp.body)) {
+      if (evento.type === 'content_block_delta' && evento.delta?.type === 'text_delta') {
+        const parte = String(evento.delta.text || '')
+        if (!parte) continue
+        desarmarRelogio()
+        inteiro += parte
+        entregar(fluxo.empurrar(parte))
+      } else if (evento.type === 'message_start') {
+        const u = evento.message?.usage || {}
+        contas.entrada = u.input_tokens || 0
+        contas.cache = u.cache_read_input_tokens || 0
+      } else if (evento.type === 'message_delta') {
+        contas.saida = evento.usage?.output_tokens || contas.saida
+      } else if (evento.type === 'error') {
+        console.error('[zeus] erro no meio do fluxo:', JSON.stringify(evento.error).slice(0, 300))
+      }
+    }
+
+    entregar(fluxo.encerrar())
 
     // Sem isto ninguem percebe que o cache parou de valer — e a conta dobra
     // em silencio. Um byte mudado no comeco do prompt basta para isso.
-    const u = dados.usage || {}
+    //
+    // E os DOIS tempos, que sao coisas diferentes: o primeiro e o que o Paulo
+    // sente como demora; o segundo e so quanto ele fala no total.
     console.log(
-      `[zeus] pensou em ${((Date.now() - comecou) / 1000).toFixed(1)}s — ` +
-        `${u.input_tokens || 0} tokens novos, ` +
-        `${u.cache_read_input_tokens || 0} do cache, ` +
-        `${u.output_tokens || 0} de resposta`
+      `[zeus] pensou: primeira frase em ${((primeiraPalavraEm ?? 0) / 1000).toFixed(1)}s, ` +
+        `resposta inteira em ${((Date.now() - comecou) / 1000).toFixed(1)}s — ` +
+        `${contas.entrada} tokens novos, ${contas.cache} do cache, ${contas.saida} de resposta`
     )
-    const bloco = Array.isArray(dados.content)
-      ? dados.content.find((b) => b.type === 'text')
-      : null
-    return bloco?.text ? String(bloco.text).trim() : null
+
+    const texto = inteiro.trim()
+    return texto ? { ok: true, texto } : { ok: false, texto: '' }
   } catch (e) {
     console.error('[zeus] Falha ao pensar:', e?.message || e)
-    return null
+    // Se ja tinha saido alguma frase, o Paulo ouviu meia resposta. Melhor
+    // admitir o que houve do que fingir que terminou.
+    return { ok: inteiro.trim().length > 0, texto: inteiro.trim() }
   } finally {
-    clearTimeout(t)
+    desarmarRelogio()
   }
 }

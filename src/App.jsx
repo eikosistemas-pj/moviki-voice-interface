@@ -7,6 +7,7 @@ import { useEscuta } from './hooks/useEscuta'
 import { useEntrada } from './hooks/useEntrada'
 import { useAviso } from './hooks/useAviso'
 import { detectarHumor } from './lib/humor'
+import { lerLinhas } from '../lib/ndjson'
 import { ENDPOINT_CEREBRO, ESTADOS, HUMORES } from './config/voz'
 
 /**
@@ -39,6 +40,7 @@ export default function App() {
 
   const {
     falar,
+    falarFluxo,
     parar,
     falando,
     carregando,
@@ -56,6 +58,11 @@ export default function App() {
    * Vai o CRACHA, nao a senha: a senha atravessa a rede uma vez so, na
    * entrada. Se o servidor recusar o cracha (venceu, ou o Zeus reiniciou), a
    * tela esquece e pede a senha de novo em vez de ficar falando sozinha.
+   *
+   * A RESPOSTA CHEGA AOS POUCOS — 18/09/2026, segunda rodada
+   * O servidor manda uma linha por frase pronta, conforme pensa. A tela
+   * comeca a sintetizar a primeira enquanto ele ainda escreve a segunda, em
+   * vez de esperar a resposta inteira para so entao procurar a voz.
    */
   const responder = useCallback(
     async (textoDaPessoa) => {
@@ -69,26 +76,56 @@ export default function App() {
           body: JSON.stringify({ texto: textoDaPessoa, cracha: entrada.cracha }),
         })
 
-        // Mesmo em 401 ou 400 o servidor manda uma frase para o Zeus falar:
-        // robo mudo nao explica o que houve, e ai a culpa sobra para a voz.
-        const dados = await r.json().catch(() => null)
+        // SERVIDOR ANTIGO AINDA RESPONDE. Entre o `git pull` e o restart do
+        // zeus-cerebro na VPS existe uma janela em que a tela e nova e o
+        // servidor e velho. Melhor a tela aguentar os dois do que o Zeus
+        // emudecer no meio da atualizacao.
+        const formato = r.headers.get('Content-Type') || ''
+        if (!formato.includes('ndjson') || !r.body) {
+          const dados = await r.json().catch(() => null)
+          if (dados?.precisaEntrar) entrada.esquecer()
+          const resposta =
+            dados?.resposta || 'Nao consegui falar com o meu servidor agora.'
+          setHumor(detectarHumor(resposta))
+          setPensando(false)
+          await falar(resposta)
+          return
+        }
 
-        if (dados?.precisaEntrar) entrada.esquecer()
-        const resposta =
-          dados?.resposta || 'Nao consegui falar com o meu servidor agora.'
+        let primeira = true
+        const frases = (async function* () {
+          for await (const linha of lerLinhas(r.body)) {
+            let d = null
+            try {
+              d = JSON.parse(linha)
+            } catch {
+              continue
+            }
+            if (d?.t === 'fala' && d.texto) {
+              // Humor definido pela PRIMEIRA frase, nao pela resposta
+              // inteira: a expressao precisa estar no rosto no instante em
+              // que a voz comeca, e nesse instante o resto ainda nem existe.
+              if (primeira) {
+                primeira = false
+                setHumor(detectarHumor(d.texto))
+                setPensando(false)
+              }
+              yield d.texto
+            } else if (d?.t === 'fim' && d.precisaEntrar) {
+              entrada.esquecer()
+            }
+          }
+        })()
 
-        // Humor definido ANTES de falar: a expressao precisa estar no
-        // rosto no instante em que a voz comeca, nao depois.
-        setHumor(detectarHumor(resposta))
+        await falarFluxo(frases)
         setPensando(false)
-        await falar(resposta)
       } catch {
         setPensando(false)
         setHumor(HUMORES.FIRMEZA)
         await falar('Nao consegui falar com o meu servidor agora.')
       }
     },
-    [falar, entrada]
+    [falar, falarFluxo, entrada]
   )
 
   const { comecar, encerrar, ouvindo, erro: erroEscuta, suportado } = useEscuta({

@@ -47,6 +47,13 @@ const ESPELHO = process.env.ZEUS_ESPELHO || '/root/eikosistemas'
 /** Quantas idas e vindas antes de desistir. */
 const MAX_VOLTAS = Number(process.env.ZEUS_MAX_VOLTAS || 14)
 
+/**
+ * Teto de espera por volta. Nao e economia: e a garantia de que a tarefa
+ * TERMINA de um jeito ou de outro. Tarefa travada nunca vira aviso, e o Paulo
+ * fica esperando uma resposta que nao existe.
+ */
+const TIMEOUT_VOLTA = Number(process.env.ZEUS_TIMEOUT_TRABALHO || 180_000)
+
 // Aqui NAO se economiza modelo. Conversar rapido e uma coisa; ler codigo e
 // escrever alteracao que o Paulo vai aprovar e outra. E o trabalho corre por
 // fora da conversa, entao o tempo dele nao deixa ninguem esperando na tela.
@@ -323,23 +330,50 @@ export async function montarProposta({ repo, ordem }) {
   const messages = [{ role: 'user', content: `Ordem do Paulo: ${ordem}` }]
 
   for (let volta = 0; volta < MAX_VOLTAS; volta += 1) {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: MODELO,
-        // Cabe folgado numa troca de trecho. Era 16000 quando ele tentava
-        // devolver o arquivo inteiro — e nem assim cabia.
-        max_tokens: 8000,
-        system: instrucao(repo),
-        tools: FERRAMENTAS,
-        messages,
-      }),
-    })
+    // TIMEOUT POR VOLTA — 18/09/2026, segunda rodada.
+    //
+    // Sem ele, uma chamada travada deixa a tarefa em "trabalhando" para
+    // sempre: ela nunca entra na fila do que ele tem para contar, e o Paulo
+    // fica esperando um aviso que nao vem. Silencio para sempre e pior que
+    // "nao deu" — pelo menos "nao deu" ele pode mandar tentar de novo.
+    const ctrl = new AbortController()
+    const relogio = setTimeout(() => {
+      try {
+        ctrl.abort()
+      } catch {
+        /* ja abortado */
+      }
+    }, TIMEOUT_VOLTA)
+
+    let resp
+    try {
+      resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        signal: ctrl.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: MODELO,
+          // Cabe folgado numa troca de trecho. Era 16000 quando ele tentava
+          // devolver o arquivo inteiro — e nem assim cabia.
+          max_tokens: 8000,
+          system: instrucao(repo),
+          tools: FERRAMENTAS,
+          messages,
+        }),
+      })
+    } catch (e) {
+      const travou = e?.name === 'AbortError'
+      return {
+        ok: false,
+        erros: [travou ? 'a IA travou e eu cortei a espera' : `nao alcancei a IA: ${e?.message || e}`],
+      }
+    } finally {
+      clearTimeout(relogio)
+    }
 
     if (!resp.ok) {
       const detalhe = await resp.text().catch(() => '')

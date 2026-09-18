@@ -1,4 +1,4 @@
-# ESTADO DO ZEUS — 18/09/2026
+# ESTADO DO ZEUS — 18/09/2026 (segunda rodada)
 
 **Para que serve este arquivo:** o Paulo trabalha o Zeus por conversas que começam do zero.
 Quando uma conversa acaba, a memória dela acaba junto. Este arquivo é a memória que fica.
@@ -63,6 +63,8 @@ pm2 restart frontend-vite
 | #6 | O estado do turno saiu de vista: saber que o turno está aberto é saber que o Paulo não está olhando |
 | #7 | **As mãos** — ordem falada vira Pull Request, em ramo `zeus/…`, nos 4 repositórios permitidos |
 | #8 | Ele passou a **chamar o Paulo por voz** sozinho: "Paulo, terminei…", "Paulo, deu alguma coisa errada aqui" |
+| #9 | O conserto do trabalho: ele troca **um trecho** do arquivo em vez de reescrever meio milhão de caracteres |
+| #10 | **A demora atacada de verdade** — ver seção 4 |
 
 **Custo:** a conversa roda no modelo barato (Haiku), o trabalho de código no modelo forte (Opus).
 O mapa mestre viaja no bloco com desconto de cache — quem repete a mesma base paga menos.
@@ -72,62 +74,94 @@ Tem teto diário de chamadas: se o endereço vazar, o prejuízo para no teto em 
 
 ## 4. ⚠️ O PONTO EXATO ONDE PARAMOS
 
-**O Paulo reclamou: "Delay enorme ainda". A causa foi encontrada e é esta:**
+### 4.1 🔴 NADA DISSO ESTÁ NO AR. É ISSO QUE FALTA.
 
-O conserto da lentidão **existe, está testado, e nunca chegou ao ar.**
+Os Pull Requests **#9 e #10 estão aprovados e na `main`**, mas a VPS ainda roda
+o código antigo. Enquanto o bloco abaixo não for rodado, **medir qualquer coisa
+é medir o problema velho**:
 
-- O conserto é o commit `4075c93`.
-- Ele foi enviado para o ramo **depois** que o Pull Request #8 já tinha sido aprovado e fechado.
-- Pull Request fechado não carrega mais nada. Então o conserto ficou parado no ramo, fora da `main`.
-- Por isso o `git pull` na VPS nunca trouxe ele. **O Zeus está rodando o código lento até agora.**
+```
+cd /root/eikosistemas/moviki-voice-interface
+git pull && npm run build
+systemctl restart zeus-cerebro && pm2 restart frontend-vite
+```
 
-### Qual era a lentidão
+Depois, **Ctrl+Shift+R** na tela (senão o navegador continua com a tela velha).
 
-Erro de projeto meu, não do modelo nem da máquina de 2 GB.
+> É quase certo que o *"peço uma coisa e ele diz que não conseguiu"* seja
+> exatamente isto: o conserto do #9 nunca chegou à máquina.
 
-Eu mandava o Zeus **ler o arquivo inteiro e devolver o arquivo inteiro**. Só que:
+### 4.2 A demora — o que era, de verdade
 
-| Arquivo | Tamanho |
+O #8 atacou a demora e ela continuou. O motivo: **o conserto do #8 quase nunca
+valia.** Ele só partia a resposta em pedaços quando ela passava de 180
+caracteres — e a instrução do Zeus manda ele responder em duas ou três frases,
+que quase sempre cabem em 180. Ou seja, na maioria das respostas ele continuava
+esperando a fala **inteira** virar áudio antes de abrir a boca.
+
+A espera tinha **quatro pedaços em fila, um depois do outro**:
+
+| # | O que era | Dono |
+|---|---|---|
+| 1 | o navegador decidir que o Paulo parou de falar | o Chrome |
+| 2 | o cérebro pensar a resposta **inteira** | a Anthropic |
+| 3 | o Kokoro virar a resposta **inteira** em áudio | **a VPS** |
+| 4 | o áudio começar a tocar | — |
+
+O #10 fez os três primeiros **andarem juntos em vez de em fila**:
+
+- **O cérebro agora responde em fluxo.** Cada frase pronta sai na hora para a
+  tela, em vez de o servidor segurar tudo até a última palavra.
+- **O primeiro pedaço de voz agora é pequeno** (uma frase), e os seguintes são
+  maiores. Só o primeiro é esperado de boca fechada; os outros são preparados
+  enquanto o anterior toca.
+- **O microfone entrega a frase assim que ela fecha**, sem esperar o Chrome se
+  convencer de que o silêncio acabou. De quebra, o microfone fecha mais cedo.
+
+### 4.3 🔴 Um apagão que estava escondido de lentidão
+
+O #8 mandava `output_config: { effort: low }` junto com o modelo `claude-haiku-4-5`.
+**O Haiku 4.5 não aceita esse parâmetro** — a API responde erro e o Zeus fica
+**sem resposta nenhuma**, dizendo "não consegui pensar agora".
+
+Isso não é lentidão, é mudez. Corrigido: o parâmetro só vai para modelo que o
+aceita. Para confirmar se era isso que estava acontecendo na VPS:
+
+```
+journalctl -u zeus-cerebro -n 200 --no-pager | grep "API recusou"
+```
+
+Se aparecer alguma linha aí, era isso.
+
+### 4.4 A pergunta do Paulo: "a máquina aguenta?"
+
+**Resposta honesta: só o pedaço 3 da tabela acima depende da máquina — e é o
+único que roda num processador só.** O cérebro é chamada de API (não usa a CPU
+da VPS) e o resto é código.
+
+Não dá para responder "aguenta ou não" no chute, então entrou um medidor:
+
+```
+cd /root/eikosistemas/moviki-voice-interface && bash servidor/medir.sh
+```
+
+Ele mede o tempo do Kokoro para uma frase curta — que é exatamente o tempo até
+o Zeus abrir a boca — e diz como ler o número:
+
+| Frase curta leva | Significa |
 |---|---|
-| `moviki-app/index.html` | 568.633 caracteres |
-| `moviki-app/parceiro.html` | 327.492 |
-| `moviki/404.html` | 264.808 |
+| menos de 1,5s | a máquina dá conta; demora que sobrar é de código |
+| 1,5s a 3s | apertado, dá para conviver, mas não é "toma lá dá cá" |
+| mais de 3s | **a máquina é o gargalo** — nenhum conserto de código tira isso |
 
-Nenhum modelo devolve meio milhão de caracteres numa resposta. Ele lia um pedaço cortado,
-tentava reescrever o todo, batia no teto e recomeçava — **dez minutos queimando dinheiro contra uma parede**,
-para trocar a cor de um botão.
+Se cair no terceiro caso, os caminhos são dois: **mais processadores**
+(CPX22 ou CPX32, é troca de plano na Hetzner, não é reinstalar tudo) ou **tirar
+a voz da VPS**. O script também mostra a "CPU roubada": acima de 5% quer dizer
+que a Hetzner está dividindo o processador com outro cliente, e aí nem trocar
+código nem trocar plano resolve sozinho.
 
-### O conserto
-
-Ele agora **procura** o trecho, **lê só uma janela** em volta dele, e **troca só aquele pedaço**.
-Trocar uma cor passou a custar algumas dezenas de caracteres em vez de meio milhão.
-De quebra ficou mais seguro: quem troca um pedaço não apaga o resto do arquivo sem querer.
-
-Se ele errar o trecho, o próprio sistema devolve o erro para ele e ele se corrige sozinho,
-em vez de propor uma alteração que não encaixa.
-
-**126 testes passando, lint limpo, build ok.**
-
-### O que o Paulo precisa fazer
-
-1. Aprovar o Pull Request **#9** (é só esse conserto + este arquivo).
-2. Rodar na VPS o bloco de publicar da seção 2.
-3. Pedir de novo a troca de cor de um botão e cronometrar.
-
-Depois disso dá para medir de verdade — o registro passou a dizer em quantos segundos e em
-quantas idas e vindas ele terminou:
-
-```
-journalctl -u zeus-cerebro -n 30 --no-pager | grep -i "trabalho\|pensou"
-```
-
-- `[zeus] pensou em Xs` → demora de **conversa**
-- `[zeus] trabalho pronto em Xs, N idas e vindas` → demora de **trabalho de código**
-
-São dois problemas diferentes e o conserto só ataca o segundo. Se a conversa ainda estiver
-lenta depois disso, o caminho é outro (fila de voz e tamanho da resposta falada).
-
----
+**Rodar esse script é o próximo passo depois de publicar.** Sem ele, a decisão
+de trocar de máquina seria dinheiro gasto no palpite.
 
 ## 5. Pendências — em ordem de importância
 
@@ -168,7 +202,15 @@ O Paulo já decidiu: *"dá para resolver de um jeito mais seguro depois, a gente
 O caminho certo é o `moviki-robo` (que já tem a chave) publicar um resumo para o Zeus ler —
 nunca a VPS ganhar a chave.
 
-### 5.6 🟢 Limpeza
+### 5.6 🟡 A voz longa continua longa
+
+O conserto do #10 encurta o tempo até a **primeira** palavra. O tempo total de
+fala continua sendo o que é: numa máquina de um processador, quanto mais ele
+fala, mais ele demora. Se depois de publicar ainda incomodar, o caminho é
+encurtar a resposta dele (de "duas ou três frases" para "uma ou duas") — é uma
+linha na instrução dele, e é decisão do Paulo, porque custa detalhe.
+
+### 5.7 🟢 Limpeza
 
 - O texto final do instalador ainda diz "Falta só o Nginx", que confunde — tirar.
 - Conferir se a falha dos dez minutos deixou algum ramo `zeus/…` ou Pull Request pela metade

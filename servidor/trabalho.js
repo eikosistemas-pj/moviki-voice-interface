@@ -271,6 +271,15 @@ function comCache(messages) {
  * consertar e melhor que assistente que sabe reclamar.
  */
 async function garantirEspelho(repo) {
+  // A CERCA VEM ANTES DA CONVENIENCIA.
+  //
+  // Trazer uma copia e uma acao de rede, e ela nao pode servir de porta dos
+  // fundos: se o repositorio nao e um dos quatro em que ele pode encostar, nao
+  // se clona nem se le. Sem esta linha, bastaria pedir uma leitura no robo do
+  // dinheiro para a copia dele aparecer nesta maquina.
+  if (!REPOS_PERMITIDOS.includes(repo)) {
+    return { ok: false, recado: `(o ${repo} nao e meu. Nao leio nem trago copia dele.)` }
+  }
   if (temEspelho(repo)) return { ok: true }
   console.warn(`[zeus] o espelho de ${repo} nao esta aqui. Trazendo agora...`)
   const veio = await espelhar(repo).catch(() => false)

@@ -89,16 +89,24 @@ test('termo curto demais nao vira varredura no repositorio inteiro', async () =>
 // A diferenca entre "nao achei" e "nao consigo ler" e enorme: a primeira faz
 // ele desistir; a segunda faz ele avisar que falta coisa na maquina.
 
-test('repositorio sem copia local diz que NAO CONSEGUE LER, nao que nao achou', async () => {
-  const r = await buscar('moviki-ai', 'newsletter')
-  assert.match(r, /NAO CONSIGO LER/, `respondeu: ${r.slice(0, 120)}`)
-  assert.match(r, /NAO QUER DIZER QUE O QUE VOCE PROCURA NAO EXISTE/)
-  assert.doesNotMatch(r, /nao achei esse texto/)
+// Nota: o caso "copia ausente E o clone falhou" nao tem teste automatico
+// porque depende de a rede falhar, e teste que depende de rede quebrar e teste
+// que um dia quebra sozinho e ninguem acredita mais nele. O comportamento esta
+// no `garantirEspelho`, e o caminho feliz dele — trazer a copia na hora — e
+// exercitado pelos dois testes abaixo, que rodam com o espelho de mentira.
+
+test('trazer copia nao vira porta dos fundos para o robo do dinheiro', async () => {
+  // Clonar e acao de rede. Se ela ignorasse a cerca, bastaria pedir uma
+  // leitura no moviki-robo para a copia dele aparecer nesta maquina.
+  for (const proibido of ['moviki-robo', 'moviki-voice-interface']) {
+    const r = await buscar(proibido, 'qualquer coisa')
+    assert.match(r, /nao e meu/, `${proibido} respondeu: ${r.slice(0, 100)}`)
+  }
 })
 
-test('ler sem copia local tambem nao mente', async () => {
-  const r = await ler('moviki-ai', 'index.html')
-  assert.match(r, /NAO CONSIGO LER/)
+test('ler repositorio que nao e dele tambem recusa', async () => {
+  const r = await ler('moviki-robo', 'index.html')
+  assert.match(r, /nao e meu/)
 })
 
 test('com a copia presente, a busca volta a responder normalmente', async () => {

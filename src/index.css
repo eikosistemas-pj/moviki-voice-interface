@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  /* Obsidiana/grafite: escuro premium, nao preto puro. */
+  background:
+    radial-gradient(120% 90% at 50% 0%, #0d131f 0%, #05060a 55%, #030409 100%);
+  background-color: #05060a;
+  color: #e7eef8;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/*
+ * Respeita quem pediu menos movimento no sistema operacional.
+ *
+ * A boca do Zeus e movida por requestAnimationFrame no ritmo do audio, e
+ * nao por animacao CSS: ela continua funcionando aqui de proposito, porque
+ * comunica que o assistente esta falando — e informacao, nao enfeite.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

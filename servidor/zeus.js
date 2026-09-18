@@ -305,7 +305,19 @@ const servidor = http.createServer(async (req, res) => {
       // senha nem se alguem esta dentro — so se a porta existe.
       return responderJSON(res, 200, { exigeSenha: porta.exigeSenha() })
     }
-    if (req.method === 'GET' && req.url === '/api/zeus/turno') {
+    if (req.method === 'GET' && req.url === '/api/zeus/vivo') {
+      // Sinal de vida, sem contar nada. Serve para o instalador conferir que
+      // o servico subiu, e nao revela nem se o Zeus esta no comando.
+      return responderJSON(res, 200, { ok: true })
+    }
+    if (req.method === 'GET' && req.url.startsWith('/api/zeus/turno')) {
+      // ATRAS DA PORTA, e isto foi um conserto: a rota respondia a qualquer
+      // um. Saber que o turno esta ABERTO e saber que o Paulo nao esta
+      // olhando — exatamente o que interessa a quem quer entrar.
+      const cracha = new URL(req.url, 'http://x').searchParams.get('cracha')
+      if (!porta.vale(cracha)) {
+        return responderJSON(res, 401, { precisaEntrar: true })
+      }
       const atual = estado.ler()
       return responderJSON(res, 200, {
         turno: atual.turno,

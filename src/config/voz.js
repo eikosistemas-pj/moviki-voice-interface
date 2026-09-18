@@ -1,19 +1,26 @@
+import { escolherVelocidade, escolherVoz } from '../../lib/escolherVoz'
+
 /**
- * Voz do ZEUS — travada, sem menus.
+ * Voz do ZEUS.
  *
- * VOZ FIXA: `im_nicola`, escolhida pelo Paulo. Nao existe seletor, nao
- * existe preferencia salva, nao existe rota de catalogo consultada. Trocar
- * a voz exige mexer nesta constante.
+ * ATE 18/09/2026 ESTAVA ERRADA. A voz era `im_nicola` e, no Kokoro, a
+ * primeira letra do nome e o IDIOMA: `i` = italiano. O Zeus era um italiano
+ * lendo portugues — dai o "robotizado, atropelando as palavras". Nao era
+ * defeito do motor nem da maquina: era voz do idioma errado.
+ *
+ * Agora o padrao e brasileiro (ver lib/escolherVoz.js). Para ouvir as outras
+ * sem refazer o build: `?voz=pm_santa`, `?voz=pf_dora`, ou `?voz=im_nicola`
+ * para comparar com a antiga.
  *
  * Por que o motor local e nao o Web Speech Synthesis do navegador:
- * a voz "Nicola" e um modelo do Kokoro que roda no servidor. O
- * speechSynthesis do navegador expoe apenas as vozes instaladas no sistema
- * operacional de cada visitante — num servidor Linux headless a lista vem
- * vazia, e num Windows/Mac qualquer viria com outras vozes, diferentes por
- * maquina. Travar em "Nicola" de verdade, igual para todos, exige o motor
- * proprio. Ver zeus-voz/README.md.
+ * o speechSynthesis expoe apenas as vozes instaladas no sistema operacional
+ * de cada visitante — num servidor Linux headless a lista vem vazia, e num
+ * Windows/Mac viria com outras vozes, diferentes por maquina. Uma voz igual
+ * para todos exige o motor proprio. Ver zeus-voz/README.md.
  */
-export const VOZ_FIXA = 'im_nicola'
+export const VOZ_FIXA = escolherVoz(
+  typeof window === 'undefined' ? '' : window.location.search
+)
 
 export const NOME_ASSISTENTE = 'Zeus'
 
@@ -41,8 +48,10 @@ export const ENDPOINT_CEREBRO =
  */
 export const TOKEN_ZEUS = import.meta.env.VITE_ZEUS_TOKEN || ''
 
-/** Ritmo natural da voz. Assistente de comando nao fala apressado. */
-export const VELOCIDADE_VOZ = 1.0
+/** Ritmo da fala. Ajustavel pela URL (`?vel=0.9`) para acertar de ouvido. */
+export const VELOCIDADE_VOZ = escolherVelocidade(
+  typeof window === 'undefined' ? '' : window.location.search
+)
 
 export const ESTADOS = {
   PARADO: 'parado',

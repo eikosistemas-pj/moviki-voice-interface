@@ -367,6 +367,8 @@ certificado e liga a renovação automática.
 Enquanto não sobe: a tela agora **explica** que o microfone está bloqueado por
 falta de endereço seguro, em vez de deixar um botão morto sem dizer nada.
 
+</details>
+
 ### 5.3 🟡 Conferir a voz de quem abre o turno
 
 Hoje está desligado (`ZEUS_CONFERE_VOZ=0`): **qualquer voz abre o turno, inclusive uma gravação.**

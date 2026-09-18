@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { pareceAnalise, pareceTrabalho, repoDoAssunto } from './comando.js'
+import { pareceAnalise, pareceBusca, pareceTrabalho, repoDoAssunto } from './comando.js'
+import { ferramentaDeBusca } from './busca.js'
 import { fraseDeAviso } from './aviso.js'
 
 // ---------------------------------------------------------------------------
@@ -184,4 +185,57 @@ test('os proibidos sao reconhecidos pelo nome, para a recusa ser a certa', () =>
   // "nao encosto nisso" em vez do vago "nao entendi onde e".
   assert.equal(repoDoAssunto('analise o moviki robo'), 'moviki-robo')
   assert.equal(repoDoAssunto('analise o moviki voice interface'), 'moviki-voice-interface')
+})
+
+// ---------------------------------------------------------------------------
+// OLHAR PARA FORA — pesquisa na internet
+// ---------------------------------------------------------------------------
+//
+// "Voce precisa dar a ele informacoes para que ele pesquise na internet
+// tambem, para ficar mais inteligente." — Paulo, 18/09/2026.
+//
+// Ate entao o Zeus so enxergava para DENTRO: mapa, retrato, codigo. Tudo o que
+// estava fora disso ele respondia com o que aprendeu no treino — que tem data
+// de validade, e ele nao sabe qual parte esta velha.
+
+test('pedido de internet vira busca, nao varredura de codigo', () => {
+  for (const f of [
+    'pesquisa na internet quanto custa a Hetzner',
+    'da uma pesquisada sobre isso',
+    'quem sao meus concorrentes hoje em dia',
+  ]) {
+    assert.equal(pareceBusca(f), true, f)
+  }
+})
+
+test('"no google" ganha ate quando a frase tem palavra do Moviki', () => {
+  // "procura no google o que mudou no WhatsApp" fala de WhatsApp, que e palavra
+  // do repositorio do atendente. Mas ninguem procura no Google dentro do
+  // proprio codigo.
+  assert.equal(pareceBusca('procura no google o que mudou no WhatsApp Business'), true)
+})
+
+test('sinal fraco perde quando ele nomeia uma parte do Moviki', () => {
+  // "mercado" pode ser mercado de verdade ou a pagina de mercado do painel.
+  assert.equal(pareceBusca('como esta o mercado do painel do lojista'), false)
+})
+
+test('ordem de mexer no codigo nunca vira busca', () => {
+  assert.equal(pareceBusca('muda a cor do botao do site'), false)
+  assert.equal(pareceBusca('analise o repositorio Moviki App'), false)
+})
+
+test('a ferramenta de busca muda de nome conforme o modelo', () => {
+  // Mandar a versao errada faz a API recusar o pedido inteiro — mesmo defeito
+  // que o `effort` no Haiku causou: o Zeus fica sem resposta nenhuma.
+  assert.equal(ferramentaDeBusca('claude-opus-5').type, 'web_search_20260209')
+  assert.equal(ferramentaDeBusca('claude-sonnet-5').type, 'web_search_20260209')
+  assert.equal(ferramentaDeBusca('claude-haiku-4-5').type, 'web_search_20250305')
+  assert.equal(ferramentaDeBusca('').type, 'web_search_20250305')
+})
+
+test('toda busca tem teto de quantas vezes procura', () => {
+  // Cada busca e paga. Sem teto, uma pergunta vaga viraria dez buscas atras de
+  // uma resposta que nao existe.
+  assert.ok(ferramentaDeBusca('claude-opus-5').max_uses > 0)
 })

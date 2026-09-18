@@ -288,6 +288,47 @@ const PERGUNTA_DE_CODIGO = [
   /\bque que (tem|ta) (errado|acontecendo)\b/,
 ]
 
+/**
+ * PEDIDO DE OLHAR PARA FORA — pesquisar na internet.
+ *
+ * Pedido do Paulo em 18/09/2026: "de a ele informacoes para que ele pesquise na
+ * internet tambem, para ficar mais inteligente".
+ *
+ * Roda ANTES da analise de codigo, e por um motivo: "procura" e "acha" estao
+ * nas duas listas. "Procura na internet quanto custa a Hetzner" nao e para
+ * virar varredura no repositorio — e o contrario tambem nao. Quem tem a palavra
+ * "internet", "web" ou "la fora" ganha.
+ */
+// ATENCAO A QUEM FOR "CONSERTAR" ESTA EXPRESSAO: `pesquis` e `googl` abrem com
+// \b e FECHAM SEM ELE, de proposito — sao PREFIXOS. Tem que casar "pesquisa",
+// "pesquisar", "pesquisada", "pesquisando", "googlei". Fechar com \b aqui faria
+// "da uma pesquisada sobre isso" deixar de ser pedido de busca.
+//
+// (Em `ONDE_MORA` a regra e a oposta, e pelo mesmo cuidado: la o \b aberto fazia
+// "bot" casar dentro de "BOTao". Prefixo so quando a intencao E o prefixo.)
+const DIZ_INTERNET = /\b(?:pesquis|googl)|\b(na internet|na web|no google|la fora|noticia|noticias)\b/
+
+/**
+ * Sinal mais fraco: sugere coisa de fora, mas pode ser do codigo tambem.
+ *
+ * "o mercado" pode ser mercado de verdade ou a pagina de mercado do painel. Por
+ * isso estes so ganham quando ele NAO nomeou um repositorio.
+ */
+const CHEIRA_A_FORA =
+  /\b(mercado|concorrente|concorrentes|concorrencia|hoje em dia|atualmente|ultima versao|quanto custa a|lancou|lancamento)\b/
+
+export function pareceBusca(frase) {
+  const t = normalizar(frase)
+  if (!t) return false
+  // "no google" ganha de tudo. "procura no google o que mudou no WhatsApp" fala
+  // de WhatsApp, que e palavra do repositorio do atendente — mas ninguem
+  // procura no Google dentro do proprio codigo.
+  if (DIZ_INTERNET.test(t)) return true
+  // Sinal fraco: so vale se ele nao nomeou parte nenhuma do Moviki.
+  if (repoDoAssunto(frase)) return false
+  return CHEIRA_A_FORA.test(t)
+}
+
 export function pareceAnalise(frase) {
   const t = normalizar(frase)
   if (!t) return false

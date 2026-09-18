@@ -39,11 +39,26 @@ test('a busca NAO alcanca o que ele nao pode alterar', async () => {
   assert.match(r, /nao achei/)
 })
 
-test('arquivo grande sem janela NAO vem inteiro; vem a orientacao', async () => {
+test('arquivo grande sem janela vem com o comeco, nao com um nao', async () => {
+  // ISTO MUDOU EM 18/09/2026, E A MUDANCA TEM DONO.
+  //
+  // Antes, arquivo grande sem linha devolvia SO o recado "grande demais, use
+  // buscar". Do lado do Zeus isso chega como leitura que nao volta: ele pediu
+  // para ler e recebeu uma recusa. O Paulo ouviu ele dizendo exatamente isso,
+  // que "a leitura nao volta".
+  //
+  // Agora vem o recado E o comeco do arquivo — que tem titulo, cabecalho e
+  // estrutura, quase sempre o bastante para ele se localizar.
   const r = await ler(REPO, 'index.html')
-  assert.match(r, /grande demais/)
-  assert.match(r, /buscar/)
-  assert.ok(r.length < 500, 'a recusa tem que ser curta, nao meio arquivo')
+  assert.match(r, /grande demais/, 'tem que continuar avisando que nao veio inteiro')
+  assert.match(r, /buscar/, 'e dizendo como pegar outro trecho')
+  assert.match(r, /^1: /m, 'e o comeco do arquivo tem que vir junto')
+
+  // Mas continua sendo uma AMOSTRA. Se vier o arquivo inteiro, volta o
+  // problema dos dez minutos contra a parede.
+  const numeradas = r.split('\n').filter((l) => /^\d+: /.test(l))
+  assert.ok(numeradas.length <= 120, `veio linha demais: ${numeradas.length}`)
+  assert.ok(numeradas.length > 50, 'veio pouco demais para ele se localizar')
 })
 
 test('com a linha, vem so a janela em volta — numerada', async () => {

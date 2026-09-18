@@ -127,6 +127,20 @@ const FALAS = {
   ondeMexer: 'Nao entendi em qual parte do Moviki e para mexer. Me diga o painel, o site, o atendente ou as redes.',
 }
 
+/**
+ * Acrescenta a previsao de tempo, quando ela for HONESTA.
+ *
+ * O Paulo pediu para saber quanto tempo vai levar. A previsao sai do que o
+ * proprio Zeus levou nas ultimas vezes — nunca de chute. Sem historico
+ * suficiente ele nao promete nada: prazo inventado e estourado toda vez
+ * destroi a confianca mais rapido do que nenhum prazo.
+ */
+function comPrazo(fala, atual, tipo) {
+  const min = estado.minutosTipicos(atual, tipo)
+  if (!min) return fala
+  return `${fala} Costuma levar uns ${min} ${min === 1 ? 'minuto' : 'minutos'}.`
+}
+
 function responderJSON(res, codigo, corpo) {
   const texto = JSON.stringify(corpo)
   res.writeHead(codigo, {
@@ -359,7 +373,9 @@ async function tratarFala(req, res) {
         estado.gravar(agora)
       })
 
-    return responderFala(res, 200, FALAS.vouTrabalhar, { turno: atual.turno })
+    return responderFala(res, 200, comPrazo(FALAS.vouTrabalhar, atual, 'trabalho'), {
+      turno: atual.turno,
+    })
   }
 
   // --- Pedido de OLHAR o codigo e responder -------------------------------
@@ -400,7 +416,9 @@ async function tratarFala(req, res) {
           estado.gravar(agora)
         })
 
-      return responderFala(res, 200, FALAS.vouOlhar, { turno: atual.turno })
+      return responderFala(res, 200, comPrazo(FALAS.vouOlhar, atual, 'analise'), {
+        turno: atual.turno,
+      })
     }
   }
 

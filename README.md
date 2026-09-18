@@ -18,6 +18,8 @@ Parametros de URL uteis:
 |---|---|
 | `?calibrar=1` | miras sobre olhos, boca, painéis e pontos do mapa |
 | `?humor=firmeza` | forca a expressao (tambem: `impaciencia`, `entusiasmo`, `feliz`) |
+| `?voz=pm_santa` | troca a voz sem refazer o build (ver abaixo) |
+| `?vel=0.9` | troca o ritmo da fala (entre 0,6 e 1,4) |
 
 ## A imagem `public/zeus.png`
 
@@ -50,11 +52,31 @@ para um rosto centralizado em 16:9 — nao ha como acertar sem a imagem.
 A boca le a amplitude REAL do audio (RMS por frame), nao uma animacao
 solta: quando o Zeus se cala, as barras baixam.
 
-## Voz travada
+## A voz
 
-`im_nicola` (Nicola), fixada em `src/config/voz.js` e tambem no servidor
-(`ZEUS_VOZ_PADRAO` na unit systemd). Nao existe seletor na tela, por
-decisao de escopo.
+**Ate 18/09/2026 estava errada.** Era `im_nicola` e, no Kokoro, a PRIMEIRA
+LETRA do nome e o idioma: `i` = italiano. O Zeus era um italiano lendo
+portugues — dai o "robotizado, atropelando as palavras". Nao era defeito do
+motor nem da maquina de 2 GB: era voz do idioma errado.
+
+As brasileiras comecam com `p`:
+
+| Voz | Como e |
+|---|---|
+| `pm_alex` | masculina brasileira — **o padrao de hoje** |
+| `pm_santa` | masculina brasileira, mais grave |
+| `pf_dora` | feminina brasileira |
+| `im_nicola` | a italiana antiga, mantida so para comparar |
+
+Escolher voz e coisa de ouvido, nao de argumento: abra com `?voz=pm_santa`,
+ouca, compare, e depois troque o padrao em `lib/escolherVoz.js`. Mesma coisa
+para o ritmo, com `?vel=0.9`.
+
+A lista e fechada de proposito — o que vem da barra de endereco nao e dado de
+confianca, e nome fora da lista cai no padrao em vez de ir para o servidor.
+
+Nao existe seletor na tela, por decisao de escopo: a escolha se faz uma vez e
+vira padrao no codigo.
 
 > Nota tecnica: a voz **nao** vem do `speechSynthesis` do navegador. Essa
 > API expoe apenas vozes instaladas no sistema de cada visitante (lista

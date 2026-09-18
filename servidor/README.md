@@ -140,10 +140,11 @@ regra de origem segura, não defeito.
 
 ## Conferir se está vivo
 
-    curl http://127.0.0.1:8124/api/zeus/turno
+    curl http://127.0.0.1:8124/api/zeus/vivo
 
-Deve responder com o estado do turno. Se responder `aberto: false`, está certo
-— o turno nasce fechado.
+Deve responder `{"ok":true}`. Esse é o único endereço que responde sem crachá,
+e de propósito ele não conta nada: saber que o turno está **aberto** é saber
+que o Paulo não está olhando.
 
 ## O botão de pânico
 

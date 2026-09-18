@@ -117,7 +117,12 @@ const FALAS = {
   naoPrevisto: 'Nao sei fazer isso e nao vou inventar. Deixei anotado.',
   vouTrabalhar: 'Vou trabalhar nisso. Te conto quando terminar.',
   vouOlhar: 'Vou olhar o codigo agora. Ja te respondo.',
-  semOficina: 'Ainda nao tenho acesso para mexer no codigo. Falta o token do GitHub aqui na maquina.',
+  // A frase antiga era verdadeira e inutil: dizia que faltava o token e
+  // acabava ali. Nao dizia se nunca foi posto, se foi apagado ou se venceu — e
+  // cada uma tem conserto diferente. Agora ela termina com o que fazer.
+  semOficina:
+    'Nao tenho o token do GitHub aqui, entao nao consigo mexer no codigo. ' +
+    'Rode o doutor na VPS que ele diz exatamente o que fazer.',
   ondeMexer: 'Nao entendi em qual parte do Moviki e para mexer. Me diga o painel, o site, o atendente ou as redes.',
 }
 
@@ -567,6 +572,43 @@ function manterOlhosAbertos() {
 }
 
 /**
+ * As maos funcionam? Token presente NAO quer dizer token bom.
+ *
+ * Ele pode ter vencido, ter sido revogado, ou nunca ter recebido permissao nos
+ * repositorios certos. Os tres dao erros diferentes na hora de abrir o Pull
+ * Request — e essa hora e sempre a pior hora.
+ */
+function conferirMaos() {
+  const token = process.env.ZEUS_GITHUB_TOKEN
+  if (!token) {
+    console.warn(
+      '[zeus] ATENCAO: sem ZEUS_GITHUB_TOKEN. Ele conversa e analisa, mas NAO ' +
+        'abre Pull Request. Conserto: bash servidor/token.sh'
+    )
+    return
+  }
+  fetch('https://api.github.com/user', {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'zeus-moviki',
+    },
+  })
+    .then(async (r) => {
+      if (r.ok) {
+        const quem = await r.json().catch(() => ({}))
+        console.log(`[zeus] maos ok: o GitHub reconhece o token (${quem.login || '?'})`)
+        return
+      }
+      console.error(
+        `[zeus] ATENCAO: o GitHub RECUSOU o token (${r.status}). ` +
+          'Ele vai falhar ao abrir Pull Request. Conserto: bash servidor/token.sh'
+      )
+    })
+    .catch((e) => console.warn('[zeus] nao consegui conferir o token agora:', e?.message || e))
+}
+
+/**
  * A RONDA — o Zeus olhando em volta sem ninguem pedir.
  *
  * De cinco em cinco minutos ele confere a maquina, a voz e os Pull Requests
@@ -645,6 +687,13 @@ servidor.listen(PORTA, '127.0.0.1', () => {
   setTimeout(ronda, 60_000)
   const rondaTimer = setInterval(ronda, 5 * 60 * 1000)
   if (typeof rondaTimer.unref === 'function') rondaTimer.unref()
+  // AS MAOS, CONFERIDAS AO SUBIR — nao na hora do pedido.
+  //
+  // O Paulo pediu uma alteracao e ouviu "nao tenho o token". Descobrir isso no
+  // momento do pedido e tarde: ele ja gastou a vontade de pedir. Agora o
+  // servico grita no registro assim que sobe, e diz o comando que resolve.
+  conferirMaos()
+
   if (!porta.exigeSenha()) {
     console.warn(
       '[zeus] ATENCAO: sem ZEUS_SENHA configurada. A porta esta ABERTA — ' +

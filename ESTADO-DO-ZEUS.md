@@ -259,6 +259,51 @@ Em ordem de quanto rende, se depois de publicar ainda incomodar:
 3. **Tirar a voz da VPS** para um serviço de fala hospedado. Resolve de vez,
    mas traz dependência nova e conta nova.
 
+### 4.8 🔴 O token do GitHub sumiu — e a causa era o próprio instalador
+
+18/09/2026, fim do dia. O Zeus respondeu que **não tinha o token do GitHub** —
+um token que já tinha sido posto.
+
+**A causa raiz:** o `instalar.sh` **reescrevia o arquivo de segredos inteiro,
+do zero, toda vez.** Para trocar uma linha era preciso responder todas as
+perguntas de novo sem errar nenhuma. Basta uma rodada passar pela pergunta do
+token com um Enter e ele é gravado **vazio por cima do que existia**.
+
+Não é só o token: a mesma armadilha apagaria a senha ou a chave da Anthropic.
+
+#### O que foi feito
+
+| | |
+|---|---|
+| `servidor/token.sh` | Troca **uma** coisa sem encostar no resto. Confere o token contra o GitHub **antes de gravar**, testa os 4 repositórios, faz cópia de segurança e reinicia o serviço |
+| `servidor/doutor.sh` | Consulta completa: segredos, token testado de verdade, espelho, serviços, tarefas presas. **Cada falha vem com o comando que resolve** |
+| `instalar.sh` | Não apaga mais o que já existe: resposta vazia preserva o valor guardado, e ele faz `.bak` antes de gravar |
+| `zeus.js` | Confere o token **ao subir**, não na hora do pedido. Token vencido ou sem permissão aparece no registro antes de estragar um pedido |
+| `zeus.js` | A frase dele deixou de ser beco sem saída: termina dizendo o que fazer |
+
+**Comando para o Paulo quando algo estiver estranho:**
+
+```
+cd /root/eikosistemas/moviki-voice-interface && bash servidor/doutor.sh
+```
+
+### 4.9 🔴 A conversa estava rodando no modelo FORTE, em silêncio
+
+O `instalar.sh` gravava `ZEUS_MODELO=claude-opus-5` no arquivo de segredos.
+Como o código lê `process.env.ZEUS_MODELO` antes do padrão, **a VPS anulava em
+silêncio a decisão do #8 de pôr a conversa no modelo rápido.** Era isso que
+fazia o registro mostrar 3,3s a 4,0s por resposta.
+
+Corrigido no instalador. Para arrumar sem reinstalar:
+
+```
+bash servidor/token.sh --modelo-rapido
+```
+
+> **Regra que fica:** configuração que mora na VPS pode anular decisão que mora
+> no código, e anula **em silêncio**. Quando o comportamento não bater com o
+> que o código diz, olhar o `zeus.env` antes de procurar bug.
+
 ## 5. Pendências — em ordem de importância
 
 ### 5.1 🔴 Trocar a chave da Anthropic (do Paulo, urgente)
@@ -308,7 +353,6 @@ linha na instrução dele, e é decisão do Paulo, porque custa detalhe.
 
 ### 5.7 🟢 Limpeza
 
-- O texto final do instalador ainda diz "Falta só o Nginx", que confunde — tirar.
 - Conferir se a falha dos dez minutos deixou algum ramo `zeus/…` ou Pull Request pela metade
   em `moviki-app`.
 

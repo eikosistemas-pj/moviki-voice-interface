@@ -138,6 +138,34 @@ fi
 # ---------------------------------------------------------------------------
 mkdir -p "$ENV_DIR"
 umask 077
+
+# ---------------------------------------------------------------------------
+# ESTE ARQUIVO REESCREVIA TUDO DO ZERO. FOI ASSIM QUE O TOKEN SUMIU.
+# ---------------------------------------------------------------------------
+# 18/09/2026: o Zeus disse ao Paulo que nao tinha o token do GitHub — um token
+# que ja tinha sido posto. A causa mais provavel: alguma rodada deste
+# instalador passou pela pergunta do token com um Enter, e gravou VAZIO por
+# cima do que existia.
+#
+# Reescrever tudo a cada rodada transforma "quero trocar uma coisa" em "tenho
+# que responder tudo de novo sem errar nenhuma". Agora o que ja estava la e
+# preservado quando a resposta vem vazia. E existe servidor/token.sh para
+# trocar UMA coisa sem passar por aqui.
+guardado() { [ -f "$ENV_ARQ" ] && grep -E "^$1=" "$ENV_ARQ" 2>/dev/null | head -1 | cut -d= -f2- || true; }
+
+# Se a pergunta ficou em branco mas ja havia valor, o valor antigo fica.
+[ -z "${CHAVE:-}" ]   && CHAVE="$(guardado ANTHROPIC_API_KEY)"
+[ -z "${SENHA:-}" ]   && SENHA="$(guardado ZEUS_SENHA)"
+[ -z "${GHTOKEN:-}" ] && GHTOKEN="$(guardado ZEUS_GITHUB_TOKEN)"
+MODELO_ANTIGO="$(guardado ZEUS_MODELO)"
+MODELO="${MODELO_ANTIGO:-claude-haiku-4-5}"
+
+if [ -f "$ENV_ARQ" ]; then
+  cp -p "$ENV_ARQ" "$ENV_ARQ.bak"
+  chmod 600 "$ENV_ARQ.bak"
+  echo "[ok] copia do arquivo anterior em $ENV_ARQ.bak"
+fi
+
 cat > "$ENV_ARQ" <<FIM
 # Segredos do cerebro do Zeus. NUNCA vai para o git.
 ANTHROPIC_API_KEY=$CHAVE
@@ -156,9 +184,16 @@ ZEUS_GITHUB_TOKEN=$GHTOKEN
 # vazar, a conta para aqui em vez de crescer a noite inteira.
 ZEUS_LIMITE_DIA=200
 
-# Modelo. claude-opus-5 e o mais forte — ele decide no lugar do Paulo quando
-# ele nao esta. Para gastar menos: claude-haiku-4-5.
-ZEUS_MODELO=claude-opus-5
+# Modelo da CONVERSA. Rapido de proposito: conversa e medida em segundos de
+# espera, e o Paulo esta na frente da tela ouvindo. O modelo FORTE continua
+# onde importa — lendo codigo e escrevendo alteracao (servidor/trabalho.js) e
+# olhando o codigo para responder (servidor/analise.js), que correm por fora
+# da conversa e nao deixam ninguem esperando.
+#
+# ESTA LINHA JA ESTEVE ERRADA: gravava claude-opus-5 e anulava em silencio a
+# decisao de por a conversa no rapido. O registro mostrava 3,3s a 4,0s por
+# resposta por causa disso.
+ZEUS_MODELO=$MODELO
 
 # CONFERENCIA DE VOZ DESLIGADA — decisao do Paulo em 18/09/2026.
 # Com 0, a frase falada basta para o Zeus assumir o posto. Qualquer voz que
@@ -245,7 +280,6 @@ fi
 
 cat <<FIM
 
-=== Falta so o Nginx ===
 
 No bloco do site do Zeus, ao lado do /api/voz que ja existe, acrescente:
 

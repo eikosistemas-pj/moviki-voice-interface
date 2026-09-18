@@ -34,7 +34,7 @@
 
 import http from 'node:http'
 import { decidir, PEDIDOS } from '../lib/turno.js'
-import { entender, pareceAnalise, pareceTrabalho, repoDoAssunto } from './comando.js'
+import { entender, pareceAnalise, pareceBusca, pareceTrabalho, repoDoAssunto } from './comando.js'
 import { montarSystem, pensarEmFluxo } from './cerebro.js'
 import { partirFala } from '../lib/partirFala.js'
 import * as estado from './estado.js'
@@ -46,6 +46,7 @@ import { criarPorta } from './porta.js'
 import { executarProposta } from './oficina.js'
 import { montarProposta } from './trabalho.js'
 import { analisar } from './analise.js'
+import { pesquisar } from './busca.js'
 import * as patrulha from './patrulha.js'
 
 const PORTA = Number(process.env.ZEUS_PORTA || 8124)
@@ -118,6 +119,7 @@ const FALAS = {
   naoPrevisto: 'Nao sei fazer isso e nao vou inventar. Deixei anotado.',
   vouTrabalhar: 'Vou trabalhar nisso. Te conto quando terminar.',
   vouOlhar: 'Vou olhar o codigo agora. Ja te respondo.',
+  vouProcurar: 'Vou procurar isso na internet. Ja te respondo.',
   // A frase antiga era verdadeira e inutil: dizia que faltava o token e
   // acabava ali. Nao dizia se nunca foi posto, se foi apagado ou se venceu — e
   // cada uma tem conserto diferente. Agora ela termina com o que fazer.
@@ -125,6 +127,7 @@ const FALAS = {
     'Nao tenho o token do GitHub aqui, entao nao consigo mexer no codigo. ' +
     'Rode o doutor na VPS que ele diz exatamente o que fazer.',
   ondeMexer: 'Nao entendi em qual parte do Moviki e para mexer. Me diga o painel, o site, o atendente ou as redes.',
+  ondeOlhar: 'Nao entendi qual parte do Moviki e para eu olhar. Me diga o painel, o site, o atendente ou as redes.',
 }
 
 /**
@@ -378,6 +381,40 @@ async function tratarFala(req, res) {
     })
   }
 
+  // --- Pedido de OLHAR PARA FORA: pesquisa na internet --------------------
+  //
+  // Vem antes da analise de codigo porque "procura" e "acha" estao nas duas
+  // listas: "procura na internet quanto custa a Hetzner" nao pode virar
+  // varredura no repositorio.
+  //
+  // A busca roda do lado da Anthropic, nao aqui: a VPS nao baixa pagina, nao
+  // guarda nada e nao ganha porta nova para fora.
+  if (pareceBusca(falado)) {
+    const id = estado.abrirTarefa(atual, { ordem: falado, repo: 'internet', tipo: 'analise' })
+    estado.anotar(atual, { o: 'busca', resumo: `fui procurar: ${falado.slice(0, 100)}` })
+    estado.gravar(atual)
+
+    pesquisar({ pergunta: falado })
+      .then((r) => {
+        const agora = estado.ler()
+        estado.fecharTarefa(agora, id, r)
+        estado.anotar(agora, {
+          o: 'busca',
+          resumo: r.ok ? `respondi sobre: ${falado.slice(0, 80)}` : `nao deu: ${(r.erros || []).join('; ')}`,
+        })
+        estado.gravar(agora)
+      })
+      .catch((e) => {
+        const agora = estado.ler()
+        estado.fecharTarefa(agora, id, { ok: false, erros: [String(e?.message || e)] })
+        estado.gravar(agora)
+      })
+
+    return responderFala(res, 200, comPrazo(FALAS.vouProcurar, atual, 'analise'), {
+      turno: atual.turno,
+    })
+  }
+
   // --- Pedido de OLHAR o codigo e responder -------------------------------
   //
   // Sem verbo de mudanca, entao nao e trabalho: ninguem vai abrir Pull
@@ -393,6 +430,19 @@ async function tratarFala(req, res) {
   // respondeu. Falso negativo aqui nao quebra nada.
   if (pareceAnalise(falado)) {
     const repo = repoDoAssunto(falado)
+    if (!repo) {
+      // PERGUNTAR ONDE, EM VEZ DE RESPONDER POR CIMA DO RETRATO.
+      //
+      // 18/09/2026: o Paulo pediu "analise o repositorio Moviki App" e, sem
+      // repositorio identificado, o pedido caia na conversa — que so tem o
+      // retrato (que ramo, que commit), nao o codigo. O Zeus respondia com
+      // honestidade que nao dava para analisar de verdade, e o Paulo ficava
+      // com a impressao de que a ferramenta de leitura estava quebrada.
+      //
+      // Ela nao estava: ele nunca chegou a abrir os olhos. Uma pergunta de uma
+      // frase resolve, e nao deixa duvida sobre o que aconteceu.
+      return responderFala(res, 200, FALAS.ondeOlhar, { turno: atual.turno })
+    }
     if (repo) {
       const id = estado.abrirTarefa(atual, { ordem: falado, repo, tipo: 'analise' })
       estado.anotar(atual, { o: 'analise', resumo: `fui olhar: ${falado.slice(0, 100)}` })

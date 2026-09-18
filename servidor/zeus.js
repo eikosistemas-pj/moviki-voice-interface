@@ -35,8 +35,10 @@
 import http from 'node:http'
 import { decidir, PEDIDOS } from '../lib/turno.js'
 import { entender } from './comando.js'
-import { montarPrompt, pensar } from './cerebro.js'
+import { montarSystem, pensar } from './cerebro.js'
 import * as estado from './estado.js'
+import * as olhos from './olhos.js'
+import { criarPorta } from './porta.js'
 
 const PORTA = Number(process.env.ZEUS_PORTA || 8124)
 const LIMITE_DIA = Number(process.env.ZEUS_LIMITE_DIA || 200)
@@ -60,9 +62,26 @@ const LIMITE_DIA = Number(process.env.ZEUS_LIMITE_DIA || 200)
 // propria mao, e o afrouxamento fica registrado na trilha a cada abertura.
 const CONFERE_VOZ = process.env.ZEUS_CONFERE_VOZ !== '0'
 
+// A PORTA. A senha mora so aqui e nunca vai para a tela — ao contrario do
+// ZEUS_TOKEN, que viajava para dentro da pagina e qualquer um lia no codigo
+// dela. Ver servidor/porta.js.
+const porta = criarPorta({ senha: process.env.ZEUS_SENHA })
+
+// OS OLHOS SO ABREM COM A PORTA TRANCADA.
+//
+// Enquanto o Zeus sabia apenas o folheto da empresa, porta fraca era
+// aborrecimento pequeno. Sabendo de tudo — o mapa mestre, o que mudou em cada
+// repositorio — a mesma porta entrega a empresa inteira a quem descobrir o
+// endereco. Entao a regra e dura e nao se discute em tempo de execucao: sem
+// senha configurada, ele continua atendendo, mas de olhos fechados.
+const OLHOS_LIGADOS = porta.exigeSenha() && process.env.ZEUS_OLHOS !== '0'
+
 /** Frases fixas. Nao gastam chamada paga: sao respostas de porta, nao de ideia. */
 const FALAS = {
   semToken: 'Nao reconheci de onde veio esse pedido.',
+  semCracha: 'Preciso que voce se identifique antes de falar comigo.',
+  senhaErrada: 'Essa senha nao e a minha.',
+  portaTrancada: 'Errou demais. Espere quinze minutos.',
   vazio: 'Nao entendi. Pode repetir?',
   teto: 'Ja falei demais hoje. Volto amanha.',
   semCerebro: 'Nao consegui pensar agora. Minha ligacao com o cerebro falhou.',
@@ -126,9 +145,13 @@ async function tratarFala(req, res) {
     return responderJSON(res, 400, { resposta: FALAS.vazio })
   }
 
-  const esperado = process.env.ZEUS_TOKEN
-  if (esperado && corpo.token !== esperado) {
-    return responderJSON(res, 401, { resposta: FALAS.semToken })
+  // O cracha vem da porta (POST /api/zeus/entrar). O ZEUS_TOKEN antigo saiu
+  // de cena: ele viajava para dentro da pagina e qualquer um lia no codigo.
+  if (!porta.vale(corpo.cracha)) {
+    return responderJSON(res, 401, {
+      resposta: FALAS.semCracha,
+      precisaEntrar: true,
+    })
   }
 
   const falado = String(corpo.texto || '').trim()
@@ -213,8 +236,13 @@ async function tratarFala(req, res) {
     return responderJSON(res, 200, { resposta: FALAS.teto, turno: atual.turno })
   }
 
+  const visao = OLHOS_LIGADOS ? olhos.ultimoRetrato() : {}
   const resposta = await pensar({
-    systemPrompt: montarPrompt({ turnoAberto: atual.turno?.aberto === true }),
+    system: montarSystem({
+      turnoAberto: atual.turno?.aberto === true,
+      mapa: visao.mapa,
+      retrato: visao.retrato,
+    }),
     historico: atual.conversa,
     falaNova: falado,
   })
@@ -234,10 +262,48 @@ async function tratarFala(req, res) {
   return responderJSON(res, 200, { resposta, turno: atual.turno })
 }
 
+/**
+ * De onde veio o pedido. So para contar os erros de senha por endereco.
+ *
+ * Nao e identidade: da para forjar. Serve para o castigo por tentativa errada
+ * nao ser geral — se fosse, bastaria alguem errar cinco vezes para trancar o
+ * Paulo do lado de fora da propria casa.
+ */
+function quemEsta(req) {
+  return req.socket?.remoteAddress || 'desconhecido'
+}
+
+async function tratarEntrada(req, res) {
+  let corpo
+  try {
+    corpo = await lerCorpo(req)
+  } catch {
+    return responderJSON(res, 400, { erro: 'pedido invalido' })
+  }
+
+  const r = porta.entrar(corpo.senha, quemEsta(req))
+  if (!r.ok) {
+    const fala =
+      r.motivo === 'porta_trancada' ? FALAS.portaTrancada : FALAS.senhaErrada
+    // 401 sempre, com a mesma cara: dizer "usuario existe mas a senha esta
+    // errada" e entregar metade do caminho a quem esta tentando.
+    return responderJSON(res, 401, { resposta: fala, motivo: r.motivo })
+  }
+  return responderJSON(res, 200, { cracha: r.cracha })
+}
+
 const servidor = http.createServer(async (req, res) => {
   try {
+    if (req.method === 'POST' && req.url === '/api/zeus/entrar') {
+      return await tratarEntrada(req, res)
+    }
     if (req.method === 'POST' && req.url === '/api/zeus') {
       return await tratarFala(req, res)
+    }
+    if (req.method === 'GET' && req.url === '/api/zeus/porta') {
+      // Serve para a tela saber se precisa pedir senha. Nao diz QUAL e a
+      // senha nem se alguem esta dentro — so se a porta existe.
+      return responderJSON(res, 200, { exigeSenha: porta.exigeSenha() })
     }
     if (req.method === 'GET' && req.url === '/api/zeus/turno') {
       const atual = estado.ler()
@@ -255,8 +321,42 @@ const servidor = http.createServer(async (req, res) => {
 
 // 127.0.0.1 de proposito: quem fala com o mundo e o Nginx, na frente. Um
 // servidor de comando nao precisa estar exposto direto na internet.
+/**
+ * Manter o retrato fresco em segundo plano.
+ *
+ * De proposito NAO acontece na hora da pergunta: atualizar seis repositorios
+ * leva dezenas de segundos, e o Paulo esta esperando resposta em voz alta.
+ * Ele conversa com o retrato mais recente; a atualizacao corre por fora.
+ */
+function manterOlhosAbertos() {
+  if (!OLHOS_LIGADOS) return
+  const atualizar = () => {
+    olhos
+      .olhar({ forcar: true })
+      .then(() => console.log('[zeus] retrato dos repositorios atualizado'))
+      .catch((e) => console.error('[zeus] nao consegui olhar:', e?.message || e))
+  }
+  atualizar()
+  const t = setInterval(atualizar, 15 * 60 * 1000)
+  // Sem isto o temporizador segura o processo de pe na hora de encerrar.
+  if (typeof t.unref === 'function') t.unref()
+}
+
 servidor.listen(PORTA, '127.0.0.1', () => {
   console.log(`[zeus] de pe em 127.0.0.1:${PORTA} — teto de ${LIMITE_DIA} falas/dia`)
+  console.log(
+    OLHOS_LIGADOS
+      ? '[zeus] olhos ABERTOS: le o mapa e o estado dos repositorios'
+      : '[zeus] olhos FECHADOS: sabe so o que esta escrito na instrucao dele'
+  )
+  manterOlhosAbertos()
+  if (!porta.exigeSenha()) {
+    console.warn(
+      '[zeus] ATENCAO: sem ZEUS_SENHA configurada. A porta esta ABERTA — ' +
+        'qualquer um que alcance este endereco fala com o Zeus. ' +
+        'Rode servidor/instalar.sh para definir uma senha.'
+    )
+  }
   if (!CONFERE_VOZ) {
     console.warn(
       '[zeus] ATENCAO: conferencia de voz DESLIGADA (ZEUS_CONFERE_VOZ=0). ' +

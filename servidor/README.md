@@ -39,6 +39,9 @@ Nunca em arquivo dentro do repositório. Na VPS, como variável de ambiente
 | `ZEUS_ESTADO` | onde guardar a memória. Padrão `./dados/estado.json` |
 | `ZEUS_PORTA` | padrão 8124 |
 | `ZEUS_CONFERE_VOZ` | `1` (padrão) exige a voz do Paulo para abrir o turno. `0` desliga |
+| `ZEUS_SENHA` | **a tranca.** Sem ela o Zeus atende de olhos fechados |
+| `ZEUS_OLHOS` | `1` (padrão) lê o mapa e os repositórios. `0` desliga |
+| `ZEUS_ESPELHO` | onde ficam os espelhos. Padrão `/root/eikosistemas` |
 
 ### Sobre o `ZEUS_CONFERE_VOZ`
 
@@ -61,11 +64,52 @@ meses, a pergunta "como esse turno foi aberto?" tem resposta.
 
 Quando o conferidor existir, troque para `1`.
 
-**O `ZEUS_TOKEN` não é segurança.** Ele viaja para o navegador e qualquer um
-lê no código da página. Serve para o endereço não ficar aberto de brincadeira
-na internet. Quem segura o prejuízo de verdade é o `ZEUS_LIMITE_DIA`: se o
-token vazar, a conta para no teto em vez de crescer a noite inteira. Para
-fechar de verdade, ponha senha no Nginx ou libere só o seu IP.
+### A tranca (`ZEUS_SENHA`)
+
+O `ZEUS_TOKEN` antigo **não era segurança**: viajava para dentro da página e
+quem abrisse o código dela lia. Saiu de cena.
+
+Agora a senha mora só no servidor e nunca vai para a tela. O Paulo digita uma
+vez, o servidor confere e devolve um **crachá** que o navegador guarda. Os
+pedidos seguintes levam o crachá, não a senha — senha roubada dá para sempre,
+crachá roubado vence.
+
+Cinco erros trancam **aquele endereço** por quinze minutos. O castigo é por
+endereço, não geral: se fosse geral, bastaria alguém errar cinco vezes para
+trancar o Paulo do lado de fora da própria casa.
+
+Reiniciar o serviço derruba todos os crachás — e isso é desejável: depois de
+mexer no Zeus, todo mundo entra de novo.
+
+**O que a tranca não resolve:** sem HTTPS, a senha atravessa a rede em texto
+aberto e quem estiver no caminho lê. A tranca só fica completa com o cadeado
+do navegador. Enquanto isso, o teto diário (`ZEUS_LIMITE_DIA`) segura o
+prejuízo se algo vazar.
+
+### Os olhos (`ZEUS_OLHOS`)
+
+A VPS guarda um espelho **só de leitura** dos seis repositórios públicos.
+Dali saem o mapa mestre (`CLAUDE.md`, a memória oficial do projeto) e o
+retrato de agora — em que ramo cada repositório está e o que entrou
+ultimamente.
+
+**Os olhos só abrem com a porta trancada.** Enquanto o Zeus sabia apenas o
+folheto da empresa, porta fraca era aborrecimento pequeno; sabendo de tudo, a
+mesma porta entrega a empresa inteira a quem descobrir o endereço. Sem
+`ZEUS_SENHA` configurada o servidor sobe de olhos fechados e grita sobre isso.
+
+O `moviki-vault` fica de fora: é o cofre do Obsidian, privado, e o Zeus fala
+em voz alta — o que ele sabe, ele diz.
+
+O espelho é atualizado a cada quinze minutos, **em segundo plano**. De
+propósito não acontece na hora da pergunta: atualizar seis repositórios leva
+dezenas de segundos e o Paulo está esperando resposta em voz alta.
+
+**Custo:** o mapa tem umas sete mil palavras e vai no pedaço *cacheado* do
+pedido — a Anthropic cobra cerca de um décimo por texto repetido que ela já
+viu. O retrato, que muda, fica de fora do cache, mas é curto. O servidor
+registra em cada resposta quantos tokens vieram do cache; se esse número zerar,
+alguém mexeu no começo do prompt e a conta vai dobrar em silêncio.
 
 ## Subir
 

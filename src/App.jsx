@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
 import PainelZeus from './components/PainelZeus'
 import BotaoMicrofone from './components/BotaoMicrofone'
+import TelaEntrada from './components/TelaEntrada'
 import { useVozZeus } from './hooks/useVozZeus'
 import { useEscuta } from './hooks/useEscuta'
+import { useEntrada } from './hooks/useEntrada'
 import { detectarHumor } from './lib/humor'
-import { ENDPOINT_CEREBRO, ESTADOS, HUMORES, TOKEN_ZEUS } from './config/voz'
+import { ENDPOINT_CEREBRO, ESTADOS, HUMORES } from './config/voz'
 
 /**
  * ZEUS — painel de voz.
@@ -21,6 +23,7 @@ import { ENDPOINT_CEREBRO, ESTADOS, HUMORES, TOKEN_ZEUS } from './config/voz'
 export default function App() {
   const [humor, setHumor] = useState(HUMORES.NEUTRO)
   const [pensando, setPensando] = useState(false)
+  const entrada = useEntrada()
 
   const { humorForcado, calibrar } = useMemo(() => {
     if (typeof window === 'undefined') return { humorForcado: null, calibrar: false }
@@ -49,9 +52,9 @@ export default function App() {
    * (servidor/zeus.js, na VPS) e fala o que voltar. A trava do turno vive la,
    * porque o que roda no navegador qualquer um edita com o console aberto.
    *
-   * O token e so um tapa-buraco de porta — ele viaja para o navegador e
-   * qualquer um consegue ler no codigo da pagina. Quem segura o prejuizo de
-   * verdade e o teto diario, do lado do servidor.
+   * Vai o CRACHA, nao a senha: a senha atravessa a rede uma vez so, na
+   * entrada. Se o servidor recusar o cracha (venceu, ou o Zeus reiniciou), a
+   * tela esquece e pede a senha de novo em vez de ficar falando sozinha.
    */
   const responder = useCallback(
     async (textoDaPessoa) => {
@@ -62,12 +65,14 @@ export default function App() {
         const r = await fetch(ENDPOINT_CEREBRO, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ texto: textoDaPessoa, token: TOKEN_ZEUS }),
+          body: JSON.stringify({ texto: textoDaPessoa, cracha: entrada.cracha }),
         })
 
         // Mesmo em 401 ou 400 o servidor manda uma frase para o Zeus falar:
         // robo mudo nao explica o que houve, e ai a culpa sobra para a voz.
         const dados = await r.json().catch(() => null)
+
+        if (dados?.precisaEntrar) entrada.esquecer()
         const resposta =
           dados?.resposta || 'Nao consegui falar com o meu servidor agora.'
 
@@ -82,7 +87,7 @@ export default function App() {
         await falar('Nao consegui falar com o meu servidor agora.')
       }
     },
-    [falar]
+    [falar, entrada]
   )
 
   const { comecar, encerrar, ouvindo, erro: erroEscuta, suportado } = useEscuta({
@@ -127,6 +132,22 @@ export default function App() {
       return
     }
     comecar()
+  }
+
+  // Enquanto o servidor nao diz se existe porta, nao pisca nada na tela: o
+  // Zeus aparecendo e sumindo seria pior que meio segundo de preto.
+  if (entrada.carregando) {
+    return <main className="h-full w-full bg-movic-obsidiana" />
+  }
+
+  if (entrada.precisaEntrar) {
+    return (
+      <TelaEntrada
+        aoEntrar={entrada.entrar}
+        erro={entrada.erro}
+        entrando={entrada.entrando}
+      />
+    )
   }
 
   return (

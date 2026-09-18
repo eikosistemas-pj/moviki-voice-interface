@@ -39,14 +39,6 @@ export const ENDPOINT_TTS =
 export const ENDPOINT_CEREBRO =
   import.meta.env.VITE_ZEUS_ENDPOINT || '/api/zeus'
 
-/**
- * Tapa-buraco de porta, NAO seguranca.
- *
- * Isto viaja para o navegador e qualquer um le no codigo da pagina. Serve
- * para o endereco nao ficar aberto de brincadeira na internet. Quem segura o
- * prejuizo de verdade e o teto diario do servidor.
- */
-export const TOKEN_ZEUS = import.meta.env.VITE_ZEUS_TOKEN || ''
 
 /** Ritmo da fala. Ajustavel pela URL (`?vel=0.9`) para acertar de ouvido. */
 export const VELOCIDADE_VOZ = escolherVelocidade(

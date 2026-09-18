@@ -1,0 +1,153 @@
+// servidor/cerebro.js  (repo: moviki-voice-interface)
+//
+// O CEREBRO DO ZEUS — chamada a API da Anthropic (Claude).
+//
+// Sem SDK, com fetch cru: mesmo padrao do moviki-ai/lib/anthropic.js e do
+// resto dos repos (Telegram, Resend, Asaas). Um servidor que o Paulo mantem
+// sozinho numa VPS tem mais valor em nao ter dependencia para atualizar do
+// que em ter acucar de sintaxe.
+//
+// ENV (na VPS, nunca em arquivo):
+//   ANTHROPIC_API_KEY   chave da API
+//   ZEUS_MODELO         opcional. Padrao abaixo.
+//   ZEUS_TIMEOUT        opcional, em ms. Padrao 30000.
+//
+// MODELO
+// O padrao e `claude-opus-5` de proposito: o Zeus decide no lugar do Paulo
+// quando ele nao esta, e isso nao e trabalho de modelo pequeno. Trocar por
+// `claude-haiku-4-5` na variavel deixa muito mais barato e um pouco mais
+// burro, sem novo deploy — a decisao e do Paulo, nao minha.
+//
+// POR QUE `effort: low`
+// Isto e voz, nao relatorio. O Paulo esta esperando o Zeus responder em voz
+// alta: resposta curta e rapida vale mais que raciocinio longo. Em rota de
+// conversa o esforco baixo segura a qualidade e derruba o tempo de espera.
+//
+// TIMEOUT E OBRIGATORIO
+// Sem ele, uma chamada travada deixa o Zeus mudo de boca aberta, sem dizer
+// nem que deu errado. Melhor ele falar "nao consegui" do que emudecer.
+
+const MODELO_PADRAO = 'claude-opus-5'
+const TIMEOUT_PADRAO = 30000
+
+/** Teto de resposta. Voz longa cansa: o Zeus fala, nao redige. */
+const MAX_TOKENS = 600
+
+/**
+ * Quem o Zeus e.
+ *
+ * Escrito para ser FALADO. Todo o resto do Moviki e texto na tela; aqui a
+ * saida vira audio, e audio nao tem negrito, nem lista, nem link para clicar.
+ */
+export function montarPrompt({ turnoAberto }) {
+  return `Voce e o ZEUS, assistente de comando do Paulo, dono do MOVIKI.
+
+O MOVIKI e um SaaS para negocios itinerantes (food truck, feira, loja movel):
+o lojista aparece no mapa onde esta, vende ao vivo pelo celular e recebe no
+Pix. Planos: Basico gratis, Pro, Premium e Enterprise. O Paulo toca tudo
+sozinho e nao e programador.
+
+O sistema tem sete repositorios e um time de cadeiras especialistas:
+Gabinete (coordenacao e memoria), Guarda (seguranca e LGPD), Tesouraria
+(dinheiro), Vitrine (site publico), Balcao (painel do lojista), Canal
+(parceiros), Atendimento (atendentes de IA), Praca (redes sociais).
+
+VOCE NAO E ATENDENTE DE CLIENTE. Voce e o posto de comando do Paulo: ele fala
+com voce e voce aciona o time. Quando ele nao esta, voce fica no lugar dele.
+
+COMO VOCE FALA
+- Portugues do Brasil, direto, sem rodeio.
+- Voce esta sendo OUVIDO, nao lido: frases curtas, sem lista, sem markdown,
+  sem endereco de site soletrado. No maximo tres ou quatro frases, a nao ser
+  que o Paulo peca detalhe.
+- Nada de codigo. Explique em linguagem de negocio: o que muda para o
+  lojista, para o parceiro, para o Paulo.
+- Trate o Paulo por voce, sem cerimonia. Voce trabalha com ele ha tempo.
+
+O QUE VOCE NUNCA FAZ SOZINHO, nem com o turno aberto:
+aprovar ou juntar Pull Request, mexer em preco ou plano, mexer em dinheiro
+(Asaas, comissao, saque), mexer em seguranca ou segredo, publicar nas redes
+em nome do Moviki, e apagar qualquer coisa. Se ele pedir, diga que isso e
+dele e por que — em uma frase, sem sermao.
+
+NA DUVIDA VOCE PARA. Robo que trava e aborrecimento; robo que decide errado
+no lugar do dono e prejuizo. Se faltar informacao, pergunte ou diga que vai
+deixar anotado.
+
+NAO INVENTE ESTADO. Voce ainda nao enxerga os repositorios em tempo real. Se
+ele perguntar algo que depende de olhar o codigo ou um Pull Request agora,
+diga com todas as letras que ainda nao esta ligado nisso, em vez de chutar um
+numero ou um status.
+
+TURNO AGORA: ${turnoAberto ? 'ABERTO — o Paulo saiu e passou o posto para voce. Voce pode decidir dentro da cerca acima, e vai prestar contas quando ele chegar.' : 'FECHADO — o Paulo esta aqui. Voce executa o que ele mandar e nao decide nada no lugar dele.'}`
+}
+
+/**
+ * Pergunta ao Claude.
+ *
+ *   historico: [{ papel: 'paulo'|'zeus', texto }]
+ * Devolve a resposta em texto, ou null se algo falhou (nunca lanca: o Zeus
+ * precisa conseguir dizer que deu errado).
+ */
+export async function pensar({ systemPrompt, historico, falaNova }) {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) {
+    console.error('[zeus] ANTHROPIC_API_KEY ausente na VPS.')
+    return null
+  }
+
+  const modelo = process.env.ZEUS_MODELO || MODELO_PADRAO
+  const limite = Number(process.env.ZEUS_TIMEOUT || TIMEOUT_PADRAO)
+
+  const messages = (historico || []).map((m) => ({
+    role: m.papel === 'zeus' ? 'assistant' : 'user',
+    content: String(m.texto || ''),
+  }))
+  messages.push({ role: 'user', content: String(falaNova || '') })
+
+  const ctrl = new AbortController()
+  const t = setTimeout(() => {
+    try {
+      ctrl.abort()
+    } catch {
+      /* ja abortado */
+    }
+  }, limite)
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: modelo,
+        max_tokens: MAX_TOKENS,
+        system: systemPrompt,
+        messages,
+        // Voz: resposta rapida vale mais que raciocinio longo.
+        output_config: { effort: 'low' },
+      }),
+      signal: ctrl.signal,
+    })
+
+    if (!resp.ok) {
+      const corpo = await resp.text().catch(() => '')
+      console.error('[zeus] API recusou:', resp.status, String(corpo).slice(0, 400))
+      return null
+    }
+
+    const dados = await resp.json()
+    const bloco = Array.isArray(dados.content)
+      ? dados.content.find((b) => b.type === 'text')
+      : null
+    return bloco?.text ? String(bloco.text).trim() : null
+  } catch (e) {
+    console.error('[zeus] Falha ao pensar:', e?.message || e)
+    return null
+  } finally {
+    clearTimeout(t)
+  }
+}

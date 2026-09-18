@@ -31,3 +31,6 @@ dist-ssr
 
 # Audio gerado em testes
 public/teste-*.wav
+
+# Memoria do Zeus na VPS (conversa e trilha nao viram commit)
+dados/

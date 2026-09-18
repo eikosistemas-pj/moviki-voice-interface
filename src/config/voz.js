@@ -22,6 +22,25 @@ export const IDIOMA_VOZ = 'pt-br'
 export const ENDPOINT_TTS =
   import.meta.env.VITE_ZEUS_TTS_ENDPOINT || '/api/voz'
 
+/**
+ * O cerebro do Zeus (servidor/zeus.js, na VPS).
+ *
+ * A tela manda o que foi falado e recebe o que ele vai dizer. Nenhuma decisao
+ * mora aqui: a trava do turno vive no servidor, porque o que roda no
+ * navegador qualquer um edita com o console aberto.
+ */
+export const ENDPOINT_CEREBRO =
+  import.meta.env.VITE_ZEUS_ENDPOINT || '/api/zeus'
+
+/**
+ * Tapa-buraco de porta, NAO seguranca.
+ *
+ * Isto viaja para o navegador e qualquer um le no codigo da pagina. Serve
+ * para o endereco nao ficar aberto de brincadeira na internet. Quem segura o
+ * prejuizo de verdade e o teto diario do servidor.
+ */
+export const TOKEN_ZEUS = import.meta.env.VITE_ZEUS_TOKEN || ''
+
 /** Ritmo natural da voz. Assistente de comando nao fala apressado. */
 export const VELOCIDADE_VOZ = 1.0
 

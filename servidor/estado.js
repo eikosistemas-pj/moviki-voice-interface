@@ -141,6 +141,66 @@ export function tarefasParaContar(estado) {
   return (estado.tarefas || []).filter((t) => !t.contada && t.estado !== 'trabalhando')
 }
 
+/**
+ * O que esta em andamento AGORA, com quanto tempo ja levou.
+ *
+ * POR QUE ISTO PASSOU A EXISTIR — 18/09/2026
+ * O Paulo pediu a cor de um botao de manha e a tarde o Zeus ainda dizia que
+ * "a tarefa esta em andamento". Ele nao sabia de nada: nao havia NADA no
+ * prompt dele sobre trabalho em andamento — so sobre trabalho terminado. Ele
+ * lia no historico da conversa que tinha dito "vou trabalhar nisso" e repetia
+ * aquilo para sempre.
+ *
+ * Isso nao e lentidao, e o robo inventando. Com esta lista ele passa a
+ * responder com o relogio na mao — ou a dizer que nao tem registro nenhum,
+ * que e a verdade quando nao tem.
+ */
+export function tarefasEmAndamento(estado, agora = Date.now()) {
+  return (estado.tarefas || [])
+    .filter((t) => t.estado === 'trabalhando')
+    .map((t) => ({
+      ...t,
+      minutos: Math.max(0, Math.round((agora - new Date(t.em).getTime()) / 60000)),
+    }))
+}
+
+/**
+ * ENTERRA TAREFA QUE NAO VAI VOLTAR. Nenhuma tarefa pode ser imortal.
+ *
+ * O trabalho corre por fora da conversa, sem `await`. Se o processo reiniciar
+ * — e numa VPS de 2 GB o sistema mata processo por falta de memoria — quem
+ * estava trabalhando morre junto, e a tarefa fica gravada como "trabalhando"
+ * PARA SEMPRE. Ela nunca entra na fila do que ele tem para contar, e o Paulo
+ * espera um aviso que nao existe mais.
+ *
+ * Chamada em dois momentos:
+ *   - ao subir o servidor, com limite 0: se estava trabalhando antes do
+ *     restart, quem trabalhava morreu. Nao ha o que esperar.
+ *   - na ronda, com o prazo: trabalho que passou do prazo virou buraco.
+ *
+ * Devolve as que foram enterradas, para o Zeus poder CONTAR o que houve em
+ * vez de simplesmente esquecer.
+ */
+export function enterrarOrfas(estado, { limiteMs = 0, motivo, agora = Date.now() } = {}) {
+  const enterradas = []
+  estado.tarefas = (estado.tarefas || []).map((t) => {
+    if (t.estado !== 'trabalhando') return t
+    const idade = agora - new Date(t.em).getTime()
+    if (idade < limiteMs) return t
+    const morta = {
+      ...t,
+      ok: false,
+      estado: 'falhou',
+      contada: false,
+      erros: [motivo || 'parei no meio e nao voltei'],
+      fimEm: new Date(agora).toISOString(),
+    }
+    enterradas.push(morta)
+    return morta
+  })
+  return enterradas
+}
+
 export function marcarContadas(estado) {
   estado.tarefas = (estado.tarefas || []).map((t) =>
     t.estado === 'trabalhando' ? t : { ...t, contada: true }

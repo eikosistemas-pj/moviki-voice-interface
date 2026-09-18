@@ -183,6 +183,69 @@ qualquer som soa como robô quebrado.
 > a 1ª palavra passa para ~5,9s, e a pausa some. É uma linha, e está comentada
 > lá.
 
+### 4.6 🔴 O DEFEITO MAIS GRAVE ATÉ AGORA: ele mentia
+
+18/09/2026, à tarde. O Paulo pediu a cor de um botão de manhã e a tarde o Zeus
+ainda dizia *"a tarefa está em andamento"*. Pediu uma análise do painel do
+parceiro; uma hora depois, *"ainda estou analisando"*.
+
+**As duas frases eram invenção.** Duas causas distintas, as duas minhas:
+
+**1. A tarefa virava zumbi.** O trabalho corre por fora da conversa, sem
+`await`, na memória do processo. Se ele reiniciasse — e numa VPS de 2 GB o
+sistema mata processo por falta de memória — o trabalho morria junto e a tarefa
+ficava gravada como `trabalhando` **para sempre**. E `tarefasParaContar` ignora
+o que está `trabalhando`. Ou seja: **a tarefa morta nunca entrava em fila
+nenhuma**, e o aviso nunca vinha.
+
+**2. Ele não tinha como saber, então inventava.** No prompt dele só havia
+trabalho TERMINADO. Nada sobre trabalho em andamento. Ele lia no histórico da
+conversa que tinha dito "vou trabalhar nisso" e repetia aquilo indefinidamente.
+E "analisar" nem é verbo de mudança — nunca virou tarefa nenhuma. Ele
+simplesmente disse que estava analisando porque soava bem.
+
+#### O que foi feito
+
+| Conserto | Onde |
+|---|---|
+| Ao subir, toda tarefa `trabalhando` é enterrada — quem trabalhava morreu no restart | `servidor/zeus.js` |
+| A ronda enterra o que passou de **12 minutos** | `servidor/zeus.js` |
+| O trabalho desiste sozinho em **10 minutos** e conta o que houve | `servidor/trabalho.js` |
+| Timeout de 90s por volta | `servidor/trabalho.js` |
+| O prompt recebe a lista do que está em andamento, **com o relógio** | `servidor/cerebro.js` |
+| Regra dura: **nunca dizer que está trabalhando em algo fora da lista** | `servidor/cerebro.js` |
+| Cada volta do trabalho vira registro — dá para ver onde ele se perde | `servidor/trabalho.js` |
+
+**A regra que passa a valer acima das outras:** falha em dez minutos vale mais
+que silêncio de seis horas. O Paulo pode mandar tentar de novo ou fazer na mão;
+esperando um aviso que não vem, ele não pode nada.
+
+> **Publicar já desentope o que está travado agora:** ao subir, o servidor
+> enterra as tarefas zumbis e o Zeus conta o que houve na primeira conversa.
+
+### 4.7 Capacidade: o que ainda falta para ele ser útil de verdade
+
+O Paulo foi direto: *"eu quero um robô que pense sozinho, ache problemas e
+resolva, para eu poder descansar."* O que separa o Zeus de hoje disso — em
+ordem, e nenhum deles é trava de segurança:
+
+1. 🔴 **Ele não sabe ANALISAR.** Pedir "analise o painel do parceiro" não cai em
+   lugar nenhum: não tem verbo de mudança, então vira conversa — e na conversa
+   ele só tem o retrato, não o código. **Ele tem as ferramentas de ler e buscar,
+   mas só dentro do caminho que termina em Pull Request.** Falta um caminho de
+   leitura que responda em voz, sem abrir PR. É o buraco mais visível.
+2. 🟡 **Ele não acha problema sozinho.** A ronda só olha máquina, voz e PR
+   parado. Não lê código atrás de coisa quebrada.
+3. 🟡 **Ele não conversa sobre o trabalho enquanto trabalha.** É tudo ou nada:
+   ou abre o PR, ou falha. Não dá para ele dizer "achei três lugares, qual
+   deles?" no meio.
+4. 🟡 **Ele não sabe se o que ele escreveu funciona.** Não roda teste nem build
+   — propõe e torce. Rodar comando é a fronteira que exige decisão do Paulo.
+
+**Esforço do modelo de trabalho subiu para `xhigh`** (era o padrão). Ler código
+alheio e acertar a alteração de primeira é exatamente o trabalho que paga
+esforço alto: cada volta economizada pensando virava três voltas errando.
+
 ### 4.6 O que ainda pode ser feito pela demora
 
 Em ordem de quanto rende, se depois de publicar ainda incomodar:

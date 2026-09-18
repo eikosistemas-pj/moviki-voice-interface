@@ -120,6 +120,23 @@ NA DUVIDA VOCE PARA. Robo que trava e aborrecimento; robo que decide errado
 no lugar do dono e prejuizo. Se faltar informacao, pergunte ou diga que vai
 deixar anotado.
 
+VOCE NUNCA DIZ QUE ESTA TRABALHANDO EM ALGO QUE NAO ESTA NA SUA LISTA.
+Esta e a regra mais dura que voce tem sobre o que voce FALA. Voce recebe a
+cada conversa a lista exata do que esta em andamento, com quanto tempo cada
+coisa ja levou. Essa lista e a unica verdade sobre isso.
+
+- Se ele perguntar de algo que ESTA na lista, responda com o relogio na mao:
+  "faz sete minutos". Passando de dez, diga que esta demorando mais do que
+  devia — nao diga que esta indo bem.
+- Se ele perguntar de algo que NAO esta na lista, diga que nao tem registro
+  daquilo em andamento e pergunte se e para comecar agora.
+- NUNCA diga "estou analisando", "estou verificando", "esta em andamento" ou
+  "ja ja te conto" para preencher silencio. Voce nao tem ferramenta de
+  analisar: ou o trabalho esta na lista, ou ele nao existe.
+
+Dizer "ainda estou nisso" sobre algo que morreu ha horas e a pior coisa que
+voce pode fazer com o Paulo: ele fica esperando em vez de tocar a vida.
+
 VOCE TEM OLHOS, MAS NAO ADIVINHA. A cada conversa voce recebe o mapa oficial
 do projeto e o estado real dos repositorios, lido do codigo. Use como fato. O
 que nao estiver ali voce NAO sabe — e "nao estou ligado nisso" e melhor
@@ -145,7 +162,7 @@ conversa: voce avisa que comecou e conta o resultado quando ele falar de novo.`
  * quinze em quinze minutos, nao a cada frase, e mandar dois mil tokens dele a
  * preco cheio toda vez era demora e dinheiro jogados fora.
  */
-export function montarMomento({ turnoAberto, tarefas }) {
+export function montarMomento({ turnoAberto, tarefas, emAndamento }) {
   const turno = turnoAberto
     ? 'ABERTO — o Paulo saiu e passou o posto para voce. Pode decidir dentro da cerca, e vai prestar contas quando ele chegar.'
     : 'FECHADO — o Paulo esta aqui. Voce executa o que ele mandar e nao decide nada no lugar dele.'
@@ -168,6 +185,34 @@ export function montarMomento({ turnoAberto, tarefas }) {
     partes.push('')
   }
 
+  // A LISTA COMPLETA DO QUE ESTA EM ANDAMENTO, COM O RELOGIO.
+  //
+  // Sem isto ele nao tinha NADA no prompt sobre trabalho em andamento — so
+  // sobre trabalho terminado. Lia no historico que tinha dito "vou trabalhar
+  // nisso" e repetia aquilo para sempre. O Paulo pediu a cor de um botao de
+  // manha e a tarde ouviu "a tarefa esta em andamento". Isso e o robo
+  // inventando, e inventar com voz de comando e o pior defeito que ele pode
+  // ter.
+  if (emAndamento?.length) {
+    partes.push('TRABALHO SEU QUE ESTA EM ANDAMENTO AGORA — esta lista e a VERDADE:')
+    for (const t of emAndamento) {
+      partes.push(`  "${t.ordem}" (${t.repo}) — comecei ha ${t.minutos} minutos`)
+    }
+    partes.push(
+      'Se ele perguntar, diga HA QUANTO TEMPO. E se ja passar de dez minutos,',
+      'diga que esta demorando mais do que devia em vez de dizer que esta indo bem.',
+      ''
+    )
+  } else {
+    partes.push(
+      'NAO HA NENHUM TRABALHO SEU EM ANDAMENTO NESTE MOMENTO.',
+      'Se ele perguntar por algo que voce teria comecado, diga que nao tem',
+      'registro disso em andamento e pergunte se e para comecar agora. NAO diga',
+      'que esta trabalhando, analisando ou verificando: seria mentira.',
+      ''
+    )
+  }
+
   return partes.join('\n')
 }
 
@@ -175,7 +220,7 @@ export function montarMomento({ turnoAberto, tarefas }) {
  * Monta o `system` em blocos. O primeiro (persona + mapa) leva a marca de
  * cache: tudo ate ela e cobrado barato a partir da segunda vez.
  */
-export function montarSystem({ turnoAberto, mapa, retrato, tarefas }) {
+export function montarSystem({ turnoAberto, mapa, retrato, tarefas, emAndamento }) {
   const fixo = [montarPersona()]
   if (mapa) {
     fixo.push(
@@ -215,7 +260,7 @@ export function montarSystem({ turnoAberto, mapa, retrato, tarefas }) {
       text: retrato || '(ainda nao olhei os repositorios; nao afirme nada sobre o estado do codigo)',
       cache_control: { type: 'ephemeral' },
     },
-    { type: 'text', text: montarMomento({ turnoAberto, tarefas }) },
+    { type: 'text', text: montarMomento({ turnoAberto, tarefas, emAndamento }) },
   ]
 }
 

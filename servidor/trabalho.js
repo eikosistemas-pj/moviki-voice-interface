@@ -52,7 +52,19 @@ const MAX_VOLTAS = Number(process.env.ZEUS_MAX_VOLTAS || 14)
  * TERMINA de um jeito ou de outro. Tarefa travada nunca vira aviso, e o Paulo
  * fica esperando uma resposta que nao existe.
  */
-const TIMEOUT_VOLTA = Number(process.env.ZEUS_TIMEOUT_TRABALHO || 180_000)
+const TIMEOUT_VOLTA = Number(process.env.ZEUS_TIMEOUT_TRABALHO || 90_000)
+
+/**
+ * PRAZO DA TAREFA INTEIRA. O teto de voltas nao bastava.
+ *
+ * 14 voltas de ate 90s dao 21 minutos no pior caso — tempo demais para o Paulo
+ * esperar sem noticia. E o teto de voltas so conta rodada: uma tarefa que anda
+ * devagar em todas elas estoura o tempo sem estourar o teto.
+ *
+ * Passado o prazo ele PARA E CONTA. Falha em dez minutos vale mais que
+ * silencio de seis horas: ele pode mandar tentar de novo, ou fazer na mao.
+ */
+const PRAZO = Number(process.env.ZEUS_PRAZO_TAREFA || 10 * 60 * 1000)
 
 // Aqui NAO se economiza modelo. Conversar rapido e uma coisa; ler codigo e
 // escrever alteracao que o Paulo vai aprovar e outra. E o trabalho corre por
@@ -330,6 +342,19 @@ export async function montarProposta({ repo, ordem }) {
   const messages = [{ role: 'user', content: `Ordem do Paulo: ${ordem}` }]
 
   for (let volta = 0; volta < MAX_VOLTAS; volta += 1) {
+    const gasto = Date.now() - comecou
+    if (gasto > PRAZO) {
+      const min = Math.round(gasto / 60000)
+      console.warn(`[zeus] desisti de "${ordem}" depois de ${min} min`)
+      return {
+        ok: false,
+        erros: [
+          `passei ${min} minutos nisso e nao cheguei na alteracao. ` +
+            'Me diga de novo com mais detalhe de onde mexer, ou faca na mao',
+        ],
+      }
+    }
+
     // TIMEOUT POR VOLTA — 18/09/2026, segunda rodada.
     //
     // Sem ele, uma chamada travada deixa a tarefa em "trabalhando" para
@@ -363,6 +388,18 @@ export async function montarProposta({ repo, ordem }) {
           system: instrucao(repo),
           tools: FERRAMENTAS,
           messages,
+          // ESFORCO MAXIMO PRATICO, DE PROPOSITO.
+          //
+          // Aqui nao se economiza. Ler codigo alheio e montar uma alteracao
+          // que encaixa de primeira e exatamente o trabalho que paga esforco
+          // alto — e cada volta que ele economiza pensando vira tres voltas
+          // errando a ancora, que custam mais tempo e mais dinheiro que o
+          // esforco teria custado.
+          //
+          // `xhigh` e o nivel recomendado para trabalho de codigo. O padrao
+          // seria `high`. A conversa continua no rapido, onde o que vale e
+          // responder logo.
+          output_config: { effort: 'xhigh' },
         }),
       })
     } catch (e) {
@@ -384,6 +421,13 @@ export async function montarProposta({ repo, ordem }) {
     messages.push({ role: 'assistant', content: dados.content })
 
     const chamadas = (dados.content || []).filter((b) => b.type === 'tool_use')
+    // Sem este registro, "ele travou" e adivinhacao. Com ele da para ver se o
+    // Zeus se perdeu procurando, lendo, ou tentando encaixar a troca.
+    console.log(
+      `[zeus] trabalho "${ordem.slice(0, 40)}" volta ${volta + 1}: ` +
+        `${chamadas.map((c) => c.name).join(', ') || 'nenhuma ferramenta'} ` +
+        `(${Math.round((Date.now() - comecou) / 1000)}s ate aqui)`
+    )
     if (chamadas.length === 0) {
       const texto = (dados.content || []).find((b) => b.type === 'text')?.text
       return { ok: false, erros: [texto || 'nao consegui montar a alteracao'] }

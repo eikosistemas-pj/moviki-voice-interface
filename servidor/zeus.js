@@ -49,6 +49,19 @@ import { montarProposta } from './trabalho.js'
 const PORTA = Number(process.env.ZEUS_PORTA || 8124)
 const LIMITE_DIA = Number(process.env.ZEUS_LIMITE_DIA || 200)
 
+/**
+ * PRAZO DE UMA TAREFA. Nenhuma pode ser imortal.
+ *
+ * O Paulo pediu a cor de um botao de manha e a tarde ainda ouvia "esta em
+ * andamento". A tarefa tinha morrido e ficado gravada como "trabalhando" para
+ * sempre — nunca entrava na fila do que o Zeus tem para contar.
+ *
+ * Passado o prazo ela vira FALHA, e falha ele conta. Melhor ouvir "nao deu, me
+ * mande tentar de novo" em doze minutos do que esperar seis horas por um aviso
+ * que nao vem.
+ */
+const PRAZO_TAREFA = Number(process.env.ZEUS_PRAZO_TAREFA || 12 * 60 * 1000)
+
 // CONFERENCIA DE VOZ — o portao da autonomia.
 //
 // Ligada (padrao), o turno so abre com a voz do Paulo reconhecida. O
@@ -342,6 +355,9 @@ async function tratarFala(req, res) {
   // --- Conversa: a unica rota que pensa, e a unica que corre em fluxo ------
   const visao = OLHOS_LIGADOS ? olhos.ultimoRetrato() : {}
   const pendentes = estado.tarefasParaContar(atual)
+  // O que esta rodando AGORA, com o relogio. Sem isto ele inventava que
+  // estava trabalhando porque tinha dito isso uma vez, horas atras.
+  const emAndamento = estado.tarefasEmAndamento(atual)
 
   const canal = abrirFluxo(res)
   const r = await pensarEmFluxo({
@@ -350,6 +366,7 @@ async function tratarFala(req, res) {
       mapa: visao.mapa,
       retrato: visao.retrato,
       tarefas: pendentes,
+      emAndamento,
     }),
     historico: atual.conversa,
     falaNova: falado,
@@ -519,6 +536,21 @@ function manterOlhosAbertos() {
  */
 function ronda() {
   const atual = estado.ler()
+
+  // Primeiro enterra o que passou do prazo. Isso vem ANTES de tudo porque e o
+  // unico jeito de uma tarefa morta virar aviso: enquanto ela estiver como
+  // "trabalhando", ela nao entra em fila nenhuma e o Paulo espera para sempre.
+  const mortas = estado.enterrarOrfas(atual, {
+    limiteMs: PRAZO_TAREFA,
+    motivo: 'passou do prazo e eu parei',
+  })
+  if (mortas.length) {
+    for (const t of mortas) {
+      console.warn(`[zeus] tarefa estourou o prazo: ${t.ordem}`)
+    }
+    estado.gravar(atual)
+  }
+
   const teto = estado.passouDoTeto(atual, LIMITE_DIA)
 
   fatos
@@ -542,6 +574,27 @@ servidor.listen(PORTA, '127.0.0.1', () => {
       : '[zeus] olhos FECHADOS: sabe so o que esta escrito na instrucao dele'
   )
   manterOlhosAbertos()
+
+  // QUEM ESTAVA TRABALHANDO ANTES DESTE RESTART MORREU JUNTO.
+  //
+  // O trabalho corre por fora, sem `await`, na memoria deste processo. Um
+  // restart — ou o sistema matando o processo por falta de memoria, que numa
+  // VPS de 2 GB acontece — leva o trabalho junto e deixa a tarefa gravada como
+  // "trabalhando" para sempre. Nao ha o que esperar: enterra e deixa o Zeus
+  // contar o que houve.
+  const doInicio = estado.ler()
+  const orfas = estado.enterrarOrfas(doInicio, {
+    limiteMs: 0,
+    motivo: 'o servidor reiniciou no meio e eu perdi o trabalho',
+  })
+  if (orfas.length) {
+    estado.gravar(doInicio)
+    console.warn(
+      `[zeus] ${orfas.length} tarefa(s) ficaram orfas no restart anterior. ` +
+        'Vou contar ao Paulo na proxima conversa:'
+    )
+    for (const t of orfas) console.warn(`[zeus]   - ${t.ordem}`)
+  }
 
   // Primeira ronda com folga: subir o servico ja e um momento de maquina
   // ocupada, e medir memoria nessa hora daria susto por nada.

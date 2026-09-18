@@ -65,20 +65,42 @@ test('o historico vira a conversa na ordem certa', () => {
   assert.equal(pedido.messages[2].content, 'e o site')
 })
 
-test('o mapa mestre vai no bloco com desconto de cache', () => {
-  // Se o mapa cair no mesmo bloco que o retrato, um byte diferente derruba o
-  // cache e o mapa inteiro passa a ser cobrado cheio a cada frase.
+test('os blocos vao do mais parado para o mais mexido', () => {
+  // O desconto de cache so vale enquanto o COMECO do pedido nao muda nem um
+  // byte. Se o retrato (que muda de 15 em 15 min) cair no mesmo bloco que o
+  // mapa, um byte novo nele derruba o mapa inteiro e a conta dobra em silencio.
   const system = montarSystem({
     turnoAberto: false,
     mapa: 'MAPA MESTRE DO MOVIKI',
     retrato: 'retrato de agora',
     tarefas: [],
   })
-  assert.equal(system.length, 2)
-  assert.deepEqual(system[0].cache_control, { type: 'ephemeral' })
+  assert.equal(system.length, 3)
+
+  // 1. persona + mapa: igual sempre, cache de uma hora.
   assert.ok(system[0].text.includes('MAPA MESTRE DO MOVIKI'))
-  assert.equal(system[1].cache_control, undefined)
-  assert.ok(system[1].text.includes('retrato de agora'))
+  assert.deepEqual(system[0].cache_control, { type: 'ephemeral', ttl: '1h' })
+
+  // 2. retrato: muda de 15 em 15 minutos, cache normal.
+  assert.equal(system[1].text, 'retrato de agora')
+  assert.deepEqual(system[1].cache_control, { type: 'ephemeral' })
+
+  // 3. turno e tarefas: muda a cada fala, sem cache.
+  assert.ok(system[2].text.includes('TURNO AGORA'))
+  assert.equal(system[2].cache_control, undefined)
+})
+
+test('o cache de uma hora existe porque o Paulo fala de vez em quando', () => {
+  // O desconto padrao vence em cinco minutos. O registro da VPS mostrou
+  // conversas com "0 do cache" — cada uma releu treze mil tokens do zero, e
+  // isso ele sente como a resposta demorando mais.
+  const system = montarSystem({ turnoAberto: true, mapa: 'MAPA', retrato: 'r', tarefas: [] })
+  assert.equal(system[0].cache_control.ttl, '1h')
+})
+
+test('sem retrato ele avisa que nao sabe, em vez de chutar', () => {
+  const system = montarSystem({ turnoAberto: false, mapa: 'MAPA', retrato: null, tarefas: [] })
+  assert.ok(system[1].text.includes('nao afirme nada sobre o estado do codigo'))
 })
 
 // ---------------------------------------------------------------------------

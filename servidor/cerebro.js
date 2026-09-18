@@ -88,6 +88,12 @@ COMO VOCE FALA
   sem endereco de site soletrado. DUAS OU TRES FRASES, no maximo — cada frase
   a mais e mais tempo que o Paulo passa esperando o audio sair. Se ele quiser
   detalhe, ele pede.
+- COMECE SEMPRE POR UMA FRASE BEM CURTA. A sua primeira frase e a unica que o
+  Paulo espera ouvindo SILENCIO: ela precisa virar audio inteira antes de sair
+  um som. Uma primeira frase de dez palavras faz ele esperar o dobro de uma de
+  cinco. Diga o essencial em poucas palavras ("Terminei.", "Ja esta no ar.",
+  "Nao deu.") e guarde o detalhe para a frase seguinte, que e preparada
+  enquanto a primeira ja esta tocando.
 - Nada de codigo. Explique em linguagem de negocio: o que muda para o
   lojista, para o parceiro, para o Paulo.
 - Trate o Paulo por voce, sem cerimonia. Voce trabalha com ele ha tempo.
@@ -114,6 +120,23 @@ NA DUVIDA VOCE PARA. Robo que trava e aborrecimento; robo que decide errado
 no lugar do dono e prejuizo. Se faltar informacao, pergunte ou diga que vai
 deixar anotado.
 
+VOCE NUNCA DIZ QUE ESTA TRABALHANDO EM ALGO QUE NAO ESTA NA SUA LISTA.
+Esta e a regra mais dura que voce tem sobre o que voce FALA. Voce recebe a
+cada conversa a lista exata do que esta em andamento, com quanto tempo cada
+coisa ja levou. Essa lista e a unica verdade sobre isso.
+
+- Se ele perguntar de algo que ESTA na lista, responda com o relogio na mao:
+  "faz sete minutos". Passando de dez, diga que esta demorando mais do que
+  devia — nao diga que esta indo bem.
+- Se ele perguntar de algo que NAO esta na lista, diga que nao tem registro
+  daquilo em andamento e pergunte se e para comecar agora.
+- NUNCA diga "estou analisando", "estou verificando", "esta em andamento" ou
+  "ja ja te conto" para preencher silencio. Voce nao tem ferramenta de
+  analisar: ou o trabalho esta na lista, ou ele nao existe.
+
+Dizer "ainda estou nisso" sobre algo que morreu ha horas e a pior coisa que
+voce pode fazer com o Paulo: ele fica esperando em vez de tocar a vida.
+
 VOCE TEM OLHOS, MAS NAO ADIVINHA. A cada conversa voce recebe o mapa oficial
 do projeto e o estado real dos repositorios, lido do codigo. Use como fato. O
 que nao estiver ali voce NAO sabe — e "nao estou ligado nisso" e melhor
@@ -124,6 +147,12 @@ VOCE SO ENXERGA O CODIGO. Numero de negocio — quantos lojistas, faturamento,
 assinaturas, pedidos — mora no Firestore, e voce ainda nao alcanca. Perguntado
 sobre numero assim, diga que ainda nao esta ligado nisso.
 
+VOCE SABE OLHAR O CODIGO E RESPONDER. Quando ele pede para voce ANALISAR,
+conferir, verificar ou dar uma olhada em alguma parte do Moviki, voce vai ler
+o codigo de verdade e responder o que viu — sem mexer em nada e sem abrir
+Pull Request. Isso leva alguns segundos e corre por fora da conversa: voce
+avisa que vai olhar e a resposta sai sozinha quando ficar pronta.
+
 VOCE TAMBEM TRABALHA. Quando o Paulo manda MEXER em alguma coisa (mudar,
 ajustar, corrigir, acrescentar), voce le o codigo e abre um Pull Request para
 ele aprovar. Voce nunca junta na main — o Vercel publica a main na hora para
@@ -132,15 +161,14 @@ conversa: voce avisa que comecou e conta o resultado quando ele falar de novo.`
 }
 
 /**
- * O pedaco que MUDA a cada conversa: o turno e o retrato de agora.
+ * O pedaco que MUDA A CADA FALA: o turno e o trabalho por contar.
  *
- * Separado da persona de proposito. A Anthropic cobra um decimo pelo texto
- * repetido que ela ja viu, mas so enquanto o comeco do prompt nao muda nem um
- * byte. Persona e mapa sao iguais sempre e vao no pedaco barato; o retrato
- * muda de quinze em quinze minutos e fica de fora. Misturar os dois faria o
- * mapa inteiro ser cobrado cheio a cada frase — e o mapa e grande.
+ * E o unico bloco sem desconto de cache, e por isso e o unico que precisa ser
+ * pequeno. O retrato saiu daqui e virou bloco proprio, com cache: ele muda de
+ * quinze em quinze minutos, nao a cada frase, e mandar dois mil tokens dele a
+ * preco cheio toda vez era demora e dinheiro jogados fora.
  */
-export function montarMomento({ turnoAberto, retrato, tarefas }) {
+export function montarMomento({ turnoAberto, tarefas, emAndamento }) {
   const turno = turnoAberto
     ? 'ABERTO — o Paulo saiu e passou o posto para voce. Pode decidir dentro da cerca, e vai prestar contas quando ele chegar.'
     : 'FECHADO — o Paulo esta aqui. Voce executa o que ele mandar e nao decide nada no lugar dele.'
@@ -154,18 +182,48 @@ export function montarMomento({ turnoAberto, retrato, tarefas }) {
     partes.push('TRABALHO QUE VOCE TERMINOU E AINDA NAO CONTOU AO PAULO —')
     partes.push('comece a resposta por isso, em uma frase, antes de responder o resto:')
     for (const t of tarefas) {
-      partes.push(
-        t.ok
-          ? `  "${t.ordem}" — pronto, abri um Pull Request: ${t.link}`
-          : `  "${t.ordem}" — nao deu: ${(t.erros || []).join('; ')}`
-      )
+      if (!t.ok) {
+        partes.push(`  "${t.ordem}" — nao deu: ${(t.erros || []).join('; ')}`)
+      } else if (t.tipo === 'analise') {
+        // Analise nao entrega link, entrega RESPOSTA. Repasse o conteudo dela;
+        // nao diga "terminei de analisar" e pare, senao ele pergunta de novo a
+        // mesma coisa.
+        partes.push(`  voce olhou "${t.ordem}" e concluiu: ${t.resposta}`)
+      } else {
+        partes.push(`  "${t.ordem}" — pronto, abri um Pull Request: ${t.link}`)
+      }
     }
     partes.push('')
   }
 
-  partes.push(
-    retrato || '(ainda nao olhei os repositorios; nao afirme nada sobre o estado do codigo)'
-  )
+  // A LISTA COMPLETA DO QUE ESTA EM ANDAMENTO, COM O RELOGIO.
+  //
+  // Sem isto ele nao tinha NADA no prompt sobre trabalho em andamento — so
+  // sobre trabalho terminado. Lia no historico que tinha dito "vou trabalhar
+  // nisso" e repetia aquilo para sempre. O Paulo pediu a cor de um botao de
+  // manha e a tarde ouviu "a tarefa esta em andamento". Isso e o robo
+  // inventando, e inventar com voz de comando e o pior defeito que ele pode
+  // ter.
+  if (emAndamento?.length) {
+    partes.push('TRABALHO SEU QUE ESTA EM ANDAMENTO AGORA — esta lista e a VERDADE:')
+    for (const t of emAndamento) {
+      partes.push(`  "${t.ordem}" (${t.repo}) — comecei ha ${t.minutos} minutos`)
+    }
+    partes.push(
+      'Se ele perguntar, diga HA QUANTO TEMPO. E se ja passar de dez minutos,',
+      'diga que esta demorando mais do que devia em vez de dizer que esta indo bem.',
+      ''
+    )
+  } else {
+    partes.push(
+      'NAO HA NENHUM TRABALHO SEU EM ANDAMENTO NESTE MOMENTO.',
+      'Se ele perguntar por algo que voce teria comecado, diga que nao tem',
+      'registro disso em andamento e pergunte se e para comecar agora. NAO diga',
+      'que esta trabalhando, analisando ou verificando: seria mentira.',
+      ''
+    )
+  }
+
   return partes.join('\n')
 }
 
@@ -173,7 +231,7 @@ export function montarMomento({ turnoAberto, retrato, tarefas }) {
  * Monta o `system` em blocos. O primeiro (persona + mapa) leva a marca de
  * cache: tudo ate ela e cobrado barato a partir da segunda vez.
  */
-export function montarSystem({ turnoAberto, mapa, retrato, tarefas }) {
+export function montarSystem({ turnoAberto, mapa, retrato, tarefas, emAndamento }) {
   const fixo = [montarPersona()]
   if (mapa) {
     fixo.push(
@@ -186,9 +244,34 @@ export function montarSystem({ turnoAberto, mapa, retrato, tarefas }) {
     )
   }
 
+  // TRES BLOCOS, DO MAIS PARADO PARA O MAIS MEXIDO — e os dois primeiros com
+  // marca de cache. O desconto so vale enquanto o COMECO do pedido nao muda
+  // nem um byte, entao a ordem aqui e a regra:
+  //
+  //   1. persona + mapa .... igual sempre          -> cache de 1 hora
+  //   2. retrato ........... muda de 15 em 15 min  -> cache normal
+  //   3. turno + tarefas ... muda a cada fala      -> sem cache
+  //
+  // O CACHE DE UMA HORA E CONSERTO DE DEMORA, NAO SO DE CUSTO — 18/09/2026.
+  // O registro da VPS mostrou varias conversas com "0 do cache": o desconto
+  // padrao vence em cinco minutos, e o Paulo fala com o Zeus de vez em quando,
+  // nao de cinco em cinco minutos. Cada vencimento obriga a reler treze mil
+  // tokens do zero — o que ele sente como a resposta demorando mais.
+  //
+  // O retrato fica FORA do bloco de uma hora porque ele muda sozinho a cada
+  // quinze minutos: junto, um byte novo nele derrubaria o mapa inteiro.
   return [
-    { type: 'text', text: fixo.join('\n'), cache_control: { type: 'ephemeral' } },
-    { type: 'text', text: montarMomento({ turnoAberto, retrato, tarefas }) },
+    {
+      type: 'text',
+      text: fixo.join('\n'),
+      cache_control: { type: 'ephemeral', ttl: '1h' },
+    },
+    {
+      type: 'text',
+      text: retrato || '(ainda nao olhei os repositorios; nao afirme nada sobre o estado do codigo)',
+      cache_control: { type: 'ephemeral' },
+    },
+    { type: 'text', text: montarMomento({ turnoAberto, tarefas, emAndamento }) },
   ]
 }
 

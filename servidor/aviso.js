@@ -28,6 +28,18 @@
 export function fraseDeAviso(tarefa) {
   if (!tarefa) return null
 
+  // ANALISE: a entrega e a RESPOSTA, nao um link.
+  //
+  // Aqui o aviso nao anuncia o resultado — ele E o resultado. Dizer "terminei
+  // a analise, me pergunte de novo" obrigaria o Paulo a pedir duas vezes a
+  // mesma coisa, que e exatamente o tipo de atrito que faz ele preferir fazer
+  // na mao.
+  if (tarefa.tipo === 'analise') {
+    if (tarefa.ok && tarefa.resposta) return tarefa.resposta
+    const porque = (tarefa.erros || []).join('; ')
+    return `Olhei o que voce pediu sobre ${tarefa.ordem} e nao consegui fechar uma resposta. ${porque}`
+  }
+
   if (tarefa.ok) {
     // O link nao e falado: soletrar endereco em voz alta e tortura. Ele fica
     // na resposta escrita, para a tela mostrar ou o Paulo abrir depois.

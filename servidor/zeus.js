@@ -34,7 +34,7 @@
 
 import http from 'node:http'
 import { decidir, PEDIDOS } from '../lib/turno.js'
-import { entender, pareceTrabalho, repoDoAssunto } from './comando.js'
+import { entender, pareceAnalise, pareceTrabalho, repoDoAssunto } from './comando.js'
 import { montarSystem, pensarEmFluxo } from './cerebro.js'
 import { partirFala } from '../lib/partirFala.js'
 import * as estado from './estado.js'
@@ -45,9 +45,23 @@ import { avaliar } from './vigia.js'
 import { criarPorta } from './porta.js'
 import { executarProposta } from './oficina.js'
 import { montarProposta } from './trabalho.js'
+import { analisar } from './analise.js'
 
 const PORTA = Number(process.env.ZEUS_PORTA || 8124)
 const LIMITE_DIA = Number(process.env.ZEUS_LIMITE_DIA || 200)
+
+/**
+ * PRAZO DE UMA TAREFA. Nenhuma pode ser imortal.
+ *
+ * O Paulo pediu a cor de um botao de manha e a tarde ainda ouvia "esta em
+ * andamento". A tarefa tinha morrido e ficado gravada como "trabalhando" para
+ * sempre — nunca entrava na fila do que o Zeus tem para contar.
+ *
+ * Passado o prazo ela vira FALHA, e falha ele conta. Melhor ouvir "nao deu, me
+ * mande tentar de novo" em doze minutos do que esperar seis horas por um aviso
+ * que nao vem.
+ */
+const PRAZO_TAREFA = Number(process.env.ZEUS_PRAZO_TAREFA || 12 * 60 * 1000)
 
 // CONFERENCIA DE VOZ — o portao da autonomia.
 //
@@ -102,6 +116,7 @@ const FALAS = {
   semTurno: 'Isso e decisao sua, e voce esta aqui. Me diga o que fazer.',
   naoPrevisto: 'Nao sei fazer isso e nao vou inventar. Deixei anotado.',
   vouTrabalhar: 'Vou trabalhar nisso. Te conto quando terminar.',
+  vouOlhar: 'Vou olhar o codigo agora. Ja te respondo.',
   semOficina: 'Ainda nao tenho acesso para mexer no codigo. Falta o token do GitHub aqui na maquina.',
   ondeMexer: 'Nao entendi em qual parte do Moviki e para mexer. Me diga o painel, o site, o atendente ou as redes.',
 }
@@ -339,9 +354,54 @@ async function tratarFala(req, res) {
     return responderFala(res, 200, FALAS.vouTrabalhar, { turno: atual.turno })
   }
 
+  // --- Pedido de OLHAR o codigo e responder -------------------------------
+  //
+  // Sem verbo de mudanca, entao nao e trabalho: ninguem vai abrir Pull
+  // Request. Mas tambem nao e conversa pura, porque a resposta certa esta no
+  // CODIGO, e na conversa ele so tem o retrato.
+  //
+  // Este caminho existe porque o Paulo pediu "analise o painel do parceiro" e
+  // nao aconteceu nada. Ele tinha olhos para ler, mas os olhos so abriam
+  // dentro do caminho que termina em Pull Request.
+  //
+  // So entra aqui quando da para saber DE QUAL parte do Moviki ele fala. Sem
+  // isso, segue para a conversa — que responde no geral, como sempre
+  // respondeu. Falso negativo aqui nao quebra nada.
+  if (pareceAnalise(falado)) {
+    const repo = repoDoAssunto(falado)
+    if (repo) {
+      const id = estado.abrirTarefa(atual, { ordem: falado, repo, tipo: 'analise' })
+      estado.anotar(atual, { o: 'analise', resumo: `fui olhar: ${falado.slice(0, 100)}` })
+      estado.gravar(atual)
+
+      // Sem `await`: a resposta sai agora. Ler codigo leva dezenas de segundos
+      // e ele esta na frente da tela esperando uma voz.
+      analisar({ repo, pergunta: falado })
+        .then((r) => {
+          const agora = estado.ler()
+          estado.fecharTarefa(agora, id, r)
+          estado.anotar(agora, {
+            o: 'analise',
+            resumo: r.ok ? `respondi sobre: ${falado.slice(0, 80)}` : `nao deu: ${(r.erros || []).join('; ')}`,
+          })
+          estado.gravar(agora)
+        })
+        .catch((e) => {
+          const agora = estado.ler()
+          estado.fecharTarefa(agora, id, { ok: false, erros: [String(e?.message || e)] })
+          estado.gravar(agora)
+        })
+
+      return responderFala(res, 200, FALAS.vouOlhar, { turno: atual.turno })
+    }
+  }
+
   // --- Conversa: a unica rota que pensa, e a unica que corre em fluxo ------
   const visao = OLHOS_LIGADOS ? olhos.ultimoRetrato() : {}
   const pendentes = estado.tarefasParaContar(atual)
+  // O que esta rodando AGORA, com o relogio. Sem isto ele inventava que
+  // estava trabalhando porque tinha dito isso uma vez, horas atras.
+  const emAndamento = estado.tarefasEmAndamento(atual)
 
   const canal = abrirFluxo(res)
   const r = await pensarEmFluxo({
@@ -350,6 +410,7 @@ async function tratarFala(req, res) {
       mapa: visao.mapa,
       retrato: visao.retrato,
       tarefas: pendentes,
+      emAndamento,
     }),
     historico: atual.conversa,
     falaNova: falado,
@@ -519,6 +580,21 @@ function manterOlhosAbertos() {
  */
 function ronda() {
   const atual = estado.ler()
+
+  // Primeiro enterra o que passou do prazo. Isso vem ANTES de tudo porque e o
+  // unico jeito de uma tarefa morta virar aviso: enquanto ela estiver como
+  // "trabalhando", ela nao entra em fila nenhuma e o Paulo espera para sempre.
+  const mortas = estado.enterrarOrfas(atual, {
+    limiteMs: PRAZO_TAREFA,
+    motivo: 'passou do prazo e eu parei',
+  })
+  if (mortas.length) {
+    for (const t of mortas) {
+      console.warn(`[zeus] tarefa estourou o prazo: ${t.ordem}`)
+    }
+    estado.gravar(atual)
+  }
+
   const teto = estado.passouDoTeto(atual, LIMITE_DIA)
 
   fatos
@@ -542,6 +618,27 @@ servidor.listen(PORTA, '127.0.0.1', () => {
       : '[zeus] olhos FECHADOS: sabe so o que esta escrito na instrucao dele'
   )
   manterOlhosAbertos()
+
+  // QUEM ESTAVA TRABALHANDO ANTES DESTE RESTART MORREU JUNTO.
+  //
+  // O trabalho corre por fora, sem `await`, na memoria deste processo. Um
+  // restart — ou o sistema matando o processo por falta de memoria, que numa
+  // VPS de 2 GB acontece — leva o trabalho junto e deixa a tarefa gravada como
+  // "trabalhando" para sempre. Nao ha o que esperar: enterra e deixa o Zeus
+  // contar o que houve.
+  const doInicio = estado.ler()
+  const orfas = estado.enterrarOrfas(doInicio, {
+    limiteMs: 0,
+    motivo: 'o servidor reiniciou no meio e eu perdi o trabalho',
+  })
+  if (orfas.length) {
+    estado.gravar(doInicio)
+    console.warn(
+      `[zeus] ${orfas.length} tarefa(s) ficaram orfas no restart anterior. ` +
+        'Vou contar ao Paulo na proxima conversa:'
+    )
+    for (const t of orfas) console.warn(`[zeus]   - ${t.ordem}`)
+  }
 
   // Primeira ronda com folga: subir o servico ja e um momento de maquina
   // ocupada, e medir memoria nessa hora daria susto por nada.

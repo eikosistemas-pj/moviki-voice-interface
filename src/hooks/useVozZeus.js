@@ -169,26 +169,28 @@ export function useVozZeus() {
   )
 
   /**
-   * Fala a resposta inteira, em pedacos, comecando antes de ela estar pronta.
+   * O MOTOR DA FALA — recebe pedacos e toca na ordem, sem esperar o fim.
    *
    * POR QUE EM PEDACOS — 18/09/2026
    * O Paulo reclamou da demora entre falar e ouvir. Boa parte dela nao era o
    * cerebro pensando: era a voz. A maquina tem um processador so, e o Kokoro
-   * so devolve o audio quando termina a resposta INTEIRA — quatro frases
-   * levam quatro vezes mais que uma, e nesse tempo todo o Zeus fica mudo.
+   * so devolve o audio quando termina de sintetizar o pedaco INTEIRO.
    *
-   * Agora cada pedaco e sintetizado enquanto o anterior toca. O tempo ate a
-   * ULTIMA palavra e quase o mesmo; o tempo ate a PRIMEIRA cai para uma
-   * fracao. E e o tempo ate a primeira que a pessoa chama de "demora".
+   * POR QUE ISTO VIROU UM FLUXO — 18/09/2026, segunda rodada
+   * A versao anterior so comecava depois de o texto INTEIRO ter chegado do
+   * servidor. Agora `fonte` pode ser uma lista pronta (as falas fixas) ou um
+   * fluxo que ainda esta sendo escrito pelo Zeus do outro lado — e neste
+   * segundo caso a sintese do primeiro pedaco comeca enquanto ele ainda pensa
+   * a segunda frase.
    *
-   * UM DE CADA VEZ, de proposito: com um processador so, mandar todos os
-   * pedidos juntos faz os pedacos brigarem pela mesma CPU e todos chegarem
-   * mais tarde.
+   * DUAS FILAS, E ELAS SAO DIFERENTES
+   *   sintese: UMA DE CADA VEZ. Com um processador so, mandar tudo junto faz
+   *            os pedidos brigarem pela mesma CPU e todos chegarem mais tarde.
+   *   fala:    na ordem de chegada, cada uma esperando a anterior terminar.
+   * Separar as duas e o que permite o pedaco 2 ficar pronto enquanto o 1 toca.
    */
-  const falar = useCallback(
-    async (texto) => {
-      if (!texto?.trim()) return
-
+  const tocarFila = useCallback(
+    async (fonte) => {
       parar()
       setErro(null)
       setCarregando(true)
@@ -196,44 +198,62 @@ export function useVozZeus() {
       const controller = new AbortController()
       abortRef.current = controller
 
-      const pedacos = partirFala(texto)
       if (!audioRef.current) audioRef.current = new Audio()
       const audio = audioRef.current
       const comAnalise = ligarAnalise(audio)
 
-      // A sintese do pedaco seguinte ja esta em andamento enquanto o atual
-      // toca. Se o Paulo mandar parar no meio, ela e abortada — e a rejeicao
-      // precisa de dono, senao o navegador reclama de promessa solta.
-      let emPreparo = sintetizar(pedacos[0], controller.signal)
+      let primeiro = true
+      let houvePedaco = false
+      let cadeiaDeSintese = Promise.resolve(null)
+      let cadeiaDeFala = Promise.resolve()
 
       try {
-        for (let i = 0; i < pedacos.length; i += 1) {
-          const url = await emPreparo
+        for await (const pedaco of fonte) {
+          if (controller.signal.aborted) break
+          if (!pedaco?.trim()) continue
+          houvePedaco = true
 
-          emPreparo =
-            i + 1 < pedacos.length
-              ? sintetizar(pedacos[i + 1], controller.signal)
-              : null
-          emPreparo?.catch(() => null)
+          const audioPronto = cadeiaDeSintese.then(() =>
+            controller.signal.aborted ? null : sintetizar(pedaco, controller.signal)
+          )
+          // A fila de sintese nao pode morrer num erro: se um pedaco falhar,
+          // o seguinte ainda precisa de vez. Quem reclama do erro e a fala.
+          cadeiaDeSintese = audioPronto.catch(() => null)
+          audioPronto.catch(() => null)
 
-          if (controller.signal.aborted) {
-            URL.revokeObjectURL(url)
-            return
-          }
-
-          if (i === 0) {
-            setCarregando(false)
-            setFalando(true)
-            medir(!comAnalise)
-          }
-
-          urlRef.current = url
-          await tocar(audio, url)
-          limparUrl()
+          const anterior = cadeiaDeFala
+          cadeiaDeFala = (async () => {
+            const [url] = await Promise.all([audioPronto, anterior])
+            if (!url) return
+            if (controller.signal.aborted) {
+              URL.revokeObjectURL(url)
+              return
+            }
+            // O rosto so muda quando a voz REALMENTE comeca: acender antes
+            // deixaria o Zeus de boca mexendo em silencio.
+            if (primeiro) {
+              primeiro = false
+              setCarregando(false)
+              setFalando(true)
+              medir(!comAnalise)
+            }
+            urlRef.current = url
+            try {
+              await tocar(audio, url)
+            } finally {
+              limparUrl()
+            }
+          })()
+          // Promessa solta precisa de dono, senao o navegador reclama. O erro
+          // de verdade e colhido no `await` la embaixo.
+          cadeiaDeFala.catch(() => null)
         }
+
+        await cadeiaDeFala
 
         pararMedicao()
         setFalando(false)
+        if (!houvePedaco) setCarregando(false)
       } catch (e) {
         if (e.name === 'AbortError' || controller.signal.aborted) return
         pararMedicao()
@@ -243,6 +263,29 @@ export function useVozZeus() {
       }
     },
     [ligarAnalise, limparUrl, medir, parar, pararMedicao, sintetizar, tocar]
+  )
+
+  /** Fala um texto que ja existe inteiro: as frases fixas e os avisos. */
+  const falar = useCallback(
+    async (texto) => {
+      if (!texto?.trim()) return
+      await tocarFila(partirFala(texto))
+    },
+    [tocarFila]
+  )
+
+  /**
+   * Fala o que o Zeus ainda esta escrevendo.
+   *
+   * `fonte` e um fluxo de frases ja prontas, vindas do servidor. Nao passa
+   * por `partirFala`: quem partiu foi o cerebro, na hora em que cada frase
+   * ficou pronta.
+   */
+  const falarFluxo = useCallback(
+    async (fonte) => {
+      await tocarFila(fonte)
+    },
+    [tocarFila]
   )
 
   useEffect(
@@ -255,5 +298,5 @@ export function useVozZeus() {
     []
   )
 
-  return { falar, parar, falando, carregando, erro, nivelRef }
+  return { falar, falarFluxo, parar, falando, carregando, erro, nivelRef }
 }

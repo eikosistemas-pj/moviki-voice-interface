@@ -14,6 +14,9 @@ export function useEscuta({ idioma = 'pt-BR', aoFinalizar } = {}) {
 
   const recRef = useRef(null)
   const finalRef = useRef('')
+  // Impede a frase de ser entregue duas vezes: uma no `isFinal` e outra no
+  // `onend`, que vem logo atras.
+  const entregueRef = useRef(false)
   const callbackRef = useRef(aoFinalizar)
 
   useEffect(() => {
@@ -37,6 +40,25 @@ export function useEscuta({ idioma = 'pt-BR', aoFinalizar } = {}) {
     rec.continuous = false
     rec.interimResults = true
 
+    /**
+     * Entrega a frase uma vez so.
+     *
+     * POR QUE NAO ESPERAR O `onend` — 18/09/2026, segunda rodada
+     * O navegador so declara o fim da escuta depois de ouvir um tanto de
+     * silencio. Esse silencio e tempo do Paulo: ele ja terminou de falar e
+     * fica esperando o Chrome se convencer disso. A frase final ja esta na
+     * mao no `isFinal` — dai para a frente esperar nao acrescenta nada.
+     */
+    const entregar = () => {
+      setOuvindo(false)
+      setParcial('')
+      const dito = finalRef.current
+      finalRef.current = ''
+      if (!dito || entregueRef.current) return
+      entregueRef.current = true
+      callbackRef.current?.(dito)
+    }
+
     rec.onresult = (evento) => {
       let texto = ''
       for (let i = evento.resultIndex; i < evento.results.length; i += 1) {
@@ -45,6 +67,14 @@ export function useEscuta({ idioma = 'pt-BR', aoFinalizar } = {}) {
       setParcial(texto)
       if (evento.results[evento.results.length - 1].isFinal) {
         finalRef.current = texto.trim()
+        // Fecha o microfone JA. Alem de ganhar tempo, e a leitura certa da
+        // regra do Paulo: escuta que morre mais cedo e escuta menos aberta.
+        try {
+          rec.stop()
+        } catch {
+          /* ja estava parando */
+        }
+        entregar()
       }
     }
 
@@ -59,13 +89,9 @@ export function useEscuta({ idioma = 'pt-BR', aoFinalizar } = {}) {
       setOuvindo(false)
     }
 
-    rec.onend = () => {
-      setOuvindo(false)
-      const dito = finalRef.current
-      finalRef.current = ''
-      setParcial('')
-      if (dito) callbackRef.current?.(dito)
-    }
+    // Rede de seguranca: se o navegador encerrar sem ter marcado nada como
+    // final (fala curta, corte de audio), a frase ainda sai por aqui.
+    rec.onend = entregar
 
     recRef.current = rec
     return () => {
@@ -85,6 +111,7 @@ export function useEscuta({ idioma = 'pt-BR', aoFinalizar } = {}) {
     setErro(null)
     setParcial('')
     finalRef.current = ''
+    entregueRef.current = false
     try {
       recRef.current.start()
       setOuvindo(true)

@@ -35,7 +35,8 @@
 import http from 'node:http'
 import { decidir, PEDIDOS } from '../lib/turno.js'
 import { entender, pareceTrabalho, repoDoAssunto } from './comando.js'
-import { montarSystem, pensar } from './cerebro.js'
+import { montarSystem, pensarEmFluxo } from './cerebro.js'
+import { partirFala } from '../lib/partirFala.js'
 import * as estado from './estado.js'
 import * as olhos from './olhos.js'
 import { montarAviso } from './aviso.js'
@@ -145,21 +146,65 @@ function relatorio(atual) {
   return `Bem-vindo de volta. Enquanto voce esteve fora: ${linhas.join('; ')}.`
 }
 
+/**
+ * ABRE O CANO ATE A TELA.
+ *
+ * POR QUE NAO E MAIS UM JSON SO — 18/09/2026, segunda rodada
+ * Antes esta rota so respondia quando a resposta estava pronta INTEIRA. A
+ * tela entao mandava o texto todo para a voz, que so entao comecava a
+ * sintetizar. Tres esperas em fila, e o Paulo de boca fechada nas tres.
+ *
+ * Agora cada FRASE PRONTA sai assim que existe, uma linha de JSON por vez
+ * (NDJSON). A tela sintetiza a primeira enquanto o Zeus ainda pensa a
+ * segunda. Resposta inteira demora o mesmo; a primeira palavra demora uma
+ * fracao — e e essa que ele chama de demora.
+ *
+ * `X-Accel-Buffering: no` e para o dia do Nginx: sem isso ele segura o fluxo
+ * e entrega tudo junto no fim, desfazendo exatamente este conserto.
+ */
+function abrirFluxo(res, codigo = 200) {
+  res.writeHead(codigo, {
+    'Content-Type': 'application/x-ndjson; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Accel-Buffering': 'no',
+  })
+  const linha = (obj) => {
+    if (res.writableEnded || res.destroyed) return
+    res.write(`${JSON.stringify(obj)}\n`)
+  }
+  return {
+    /** Um pedaco JA partido, do jeito que veio do cerebro. */
+    pedaco: (texto) => linha({ t: 'fala', texto }),
+    /** Uma frase inteira ainda por partir (as falas fixas do Zeus). */
+    fala: (texto) => {
+      for (const p of partirFala(texto)) linha({ t: 'fala', texto: p })
+    },
+    fim: (extra) => {
+      linha({ t: 'fim', ...extra })
+      if (!res.writableEnded) res.end()
+    },
+  }
+}
+
+/** Resposta de uma frase so: abre, fala, fecha. */
+function responderFala(res, codigo, texto, extra) {
+  const canal = abrirFluxo(res, codigo)
+  canal.fala(texto)
+  canal.fim(extra)
+}
+
 async function tratarFala(req, res) {
   let corpo
   try {
     corpo = await lerCorpo(req)
   } catch {
-    return responderJSON(res, 400, { resposta: FALAS.vazio })
+    return responderFala(res, 400, FALAS.vazio, {})
   }
 
   // O cracha vem da porta (POST /api/zeus/entrar). O ZEUS_TOKEN antigo saiu
   // de cena: ele viajava para dentro da pagina e qualquer um lia no codigo.
   if (!porta.vale(corpo.cracha)) {
-    return responderJSON(res, 401, {
-      resposta: FALAS.semCracha,
-      precisaEntrar: true,
-    })
+    return responderFala(res, 401, FALAS.semCracha, { precisaEntrar: true })
   }
 
   const falado = String(corpo.texto || '').trim()
@@ -167,7 +212,7 @@ async function tratarFala(req, res) {
 
   const pedido = entender(falado)
   if (!pedido.tipo) {
-    return responderJSON(res, 200, { resposta: FALAS.vazio, turno: atual.turno })
+    return responderFala(res, 200, FALAS.vazio, { turno: atual.turno })
   }
 
   // Com a conferencia ligada, a prova ainda nao existe (o conferidor nao foi
@@ -193,7 +238,7 @@ async function tratarFala(req, res) {
       estado.gravar(atual)
       const fala =
         veredito.motivo === 'turno_ja_aberto' ? FALAS.jaAberto : FALAS.vozNaoConferida
-      return responderJSON(res, 200, { resposta: fala, turno: atual.turno })
+      return responderFala(res, 200, fala, { turno: atual.turno })
     }
     atual.turno = {
       aberto: true,
@@ -207,22 +252,24 @@ async function tratarFala(req, res) {
       resumo: CONFERE_VOZ ? 'assumi o posto' : 'assumi o posto sem conferencia de voz',
     })
     estado.gravar(atual)
-    return responderJSON(res, 200, {
-      resposta: CONFERE_VOZ ? FALAS.assumi : FALAS.assumiSemProva,
-      turno: atual.turno,
-    })
+    return responderFala(
+      res,
+      200,
+      CONFERE_VOZ ? FALAS.assumi : FALAS.assumiSemProva,
+      { turno: atual.turno }
+    )
   }
 
   // --- Fechar o turno -----------------------------------------------------
   if (pedido.tipo === PEDIDOS.FECHAR_TURNO) {
     if (veredito.motivo === 'ja_estava_fechado') {
-      return responderJSON(res, 200, { resposta: FALAS.jaFechado, turno: atual.turno })
+      return responderFala(res, 200, FALAS.jaFechado, { turno: atual.turno })
     }
     const fala = relatorio(atual)
     atual.turno = { aberto: false, fechadoEm: new Date().toISOString() }
     estado.anotar(atual, { o: 'turno_fechado', resumo: 'devolvi o posto' })
     estado.gravar(atual)
-    return responderJSON(res, 200, { resposta: fala, turno: atual.turno })
+    return responderFala(res, 200, fala, { turno: atual.turno })
   }
 
   // --- Assunto vedado ou pedido estranho ----------------------------------
@@ -235,13 +282,13 @@ async function tratarFala(req, res) {
         : veredito.motivo === 'sem_turno'
           ? FALAS.semTurno
           : FALAS.naoPrevisto
-    return responderJSON(res, 200, { resposta: fala, turno: atual.turno })
+    return responderFala(res, 200, fala, { turno: atual.turno })
   }
 
   // --- Trabalho: aqui comeca a gastar -------------------------------------
   const teto = estado.passouDoTeto(atual, LIMITE_DIA)
   if (teto.estourou) {
-    return responderJSON(res, 200, { resposta: FALAS.teto, turno: atual.turno })
+    return responderFala(res, 200, FALAS.teto, { turno: atual.turno })
   }
 
   // --- Ordem de mexer no codigo -------------------------------------------
@@ -255,10 +302,10 @@ async function tratarFala(req, res) {
   if (pareceTrabalho(falado)) {
     const repo = repoDoAssunto(falado)
     if (!repo) {
-      return responderJSON(res, 200, { resposta: FALAS.ondeMexer, turno: atual.turno })
+      return responderFala(res, 200, FALAS.ondeMexer, { turno: atual.turno })
     }
     if (!process.env.ZEUS_GITHUB_TOKEN) {
-      return responderJSON(res, 200, { resposta: FALAS.semOficina, turno: atual.turno })
+      return responderFala(res, 200, FALAS.semOficina, { turno: atual.turno })
     }
 
     const id = estado.abrirTarefa(atual, { ordem: falado, repo })
@@ -289,12 +336,15 @@ async function tratarFala(req, res) {
         estado.gravar(agora)
       })
 
-    return responderJSON(res, 200, { resposta: FALAS.vouTrabalhar, turno: atual.turno })
+    return responderFala(res, 200, FALAS.vouTrabalhar, { turno: atual.turno })
   }
 
+  // --- Conversa: a unica rota que pensa, e a unica que corre em fluxo ------
   const visao = OLHOS_LIGADOS ? olhos.ultimoRetrato() : {}
   const pendentes = estado.tarefasParaContar(atual)
-  const resposta = await pensar({
+
+  const canal = abrirFluxo(res)
+  const r = await pensarEmFluxo({
     system: montarSystem({
       turnoAberto: atual.turno?.aberto === true,
       mapa: visao.mapa,
@@ -303,10 +353,14 @@ async function tratarFala(req, res) {
     }),
     historico: atual.conversa,
     falaNova: falado,
+    // AQUI MORA O CONSERTO DA DEMORA: cada frase pronta sai na hora, em vez
+    // de a tela esperar a resposta inteira para so entao procurar a voz.
+    aoPedaco: (pedaco) => canal.pedaco(pedaco),
   })
 
-  if (!resposta) {
-    return responderJSON(res, 200, { resposta: FALAS.semCerebro, turno: atual.turno })
+  if (!r.texto) {
+    canal.fala(FALAS.semCerebro)
+    return canal.fim({ turno: atual.turno })
   }
 
   estado.contarChamada(atual)
@@ -314,13 +368,13 @@ async function tratarFala(req, res) {
   // o Zeus daria o trabalho por contado sem ter aberto a boca.
   if (pendentes.length) estado.marcarContadas(atual)
   estado.lembrarFala(atual, 'paulo', falado)
-  estado.lembrarFala(atual, 'zeus', resposta)
+  estado.lembrarFala(atual, 'zeus', r.texto)
   if (atual.turno?.aberto) {
     estado.anotar(atual, { o: 'conversa', resumo: falado.slice(0, 120) })
   }
   estado.gravar(atual)
 
-  return responderJSON(res, 200, { resposta, turno: atual.turno })
+  return canal.fim({ turno: atual.turno })
 }
 
 /**
@@ -418,7 +472,13 @@ const servidor = http.createServer(async (req, res) => {
     responderJSON(res, 404, { erro: 'rota desconhecida' })
   } catch (e) {
     console.error('[zeus] erro nao previsto:', e?.message || e)
-    responderJSON(res, 500, { resposta: FALAS.semCerebro })
+    // Com o fluxo ja aberto o cabecalho ja foi: escrever outro derrubaria a
+    // conexao sem o Zeus dizer nada. Fecha o que estava aberto e pronto.
+    if (res.headersSent) {
+      if (!res.writableEnded) res.end()
+      return
+    }
+    responderFala(res, 500, FALAS.semCerebro, {})
   }
 })
 

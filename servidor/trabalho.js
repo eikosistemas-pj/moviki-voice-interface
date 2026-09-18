@@ -39,6 +39,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { podeMexer, REPOS_PERMITIDOS } from './maos.js'
+import { espelhar, temEspelho } from './olhos.js'
 import { aplicarTroca, nomearRamo, validar } from './proposta.js'
 
 /** Onde ele LE para trabalhar: o espelho, que e so leitura. */
@@ -247,6 +248,43 @@ function comCache(messages) {
   return copia
 }
 
+/**
+ * O ESPELHO ESTA AQUI? E, SE NAO ESTIVER, TRAZ.
+ *
+ * ---------------------------------------------------------------------------
+ * O DEFEITO MAIS TRAICOEIRO ATE AGORA — 18/09/2026
+ * ---------------------------------------------------------------------------
+ * O Zeus le o codigo de uma copia local dos repositorios. Se essa copia nao
+ * estivesse na maquina, `arquivosDeTexto` percorria uma pasta que nao existe,
+ * voltava com lista vazia, e a busca respondia:
+ *
+ *     "(nao achei esse texto em lugar nenhum)"
+ *
+ * Que e MENTIRA. O certo seria "nao consigo ler, a copia nao esta aqui".
+ *
+ * A diferenca entre as duas frases e enorme: a primeira faz o Zeus concluir
+ * que a newsletter nao existe e desistir; a segunda faz ele avisar que tem
+ * coisa faltando na maquina. Silencio e engano tem o mesmo gosto para quem
+ * esta do outro lado.
+ *
+ * Alem de avisar, ele TENTA RESOLVER: clona na hora. Assistente que sabe se
+ * consertar e melhor que assistente que sabe reclamar.
+ */
+async function garantirEspelho(repo) {
+  if (temEspelho(repo)) return { ok: true }
+  console.warn(`[zeus] o espelho de ${repo} nao esta aqui. Trazendo agora...`)
+  const veio = await espelhar(repo).catch(() => false)
+  if (veio && temEspelho(repo)) return { ok: true, clonadoAgora: true }
+  return {
+    ok: false,
+    recado:
+      `(NAO CONSIGO LER o ${repo}: a copia dele nao esta nesta maquina e eu ` +
+      'nao consegui trazer agora. ISTO NAO QUER DIZER QUE O QUE VOCE PROCURA ' +
+      'NAO EXISTE — quer dizer que eu nao consigo olhar. Diga isso ao Paulo, ' +
+      'com estas palavras, e pare: ele precisa rodar o doutor na VPS.)',
+  }
+}
+
 function dentroDoRepo(repo, relativo) {
   const base = path.resolve(path.join(ESPELHO, repo))
   const alvo = path.resolve(path.join(base, relativo || ''))
@@ -309,6 +347,8 @@ function achatar(texto) {
  */
 export async function buscar(repo, termo) {
   if (!termo || termo.length < 2) return '(me diga um texto maior para procurar)'
+  const espelho = await garantirEspelho(repo)
+  if (!espelho.ok) return espelho.recado
 
   const alvoAchatado = achatar(termo)
   const lista = await arquivosDeTexto(repo)
@@ -349,6 +389,8 @@ export async function buscar(repo, termo) {
 
 /** Le uma janela de linhas. Sem janela, arquivo grande vem cortado. */
 export async function ler(repo, caminho, linha, quantas) {
+  const espelho = await garantirEspelho(repo)
+  if (!espelho.ok) return espelho.recado
   const veredito = podeMexer(repo, caminho)
   if (!veredito.permitido) return `(nao posso ler: ${veredito.motivo})`
 
@@ -398,6 +440,8 @@ export async function ler(repo, caminho, linha, quantas) {
 }
 
 export async function listar(repo, pasta = '') {
+  const espelho = await garantirEspelho(repo)
+  if (!espelho.ok) return espelho.recado
   const alvo = dentroDoRepo(repo, pasta)
   if (!alvo) return '(caminho invalido)'
   try {
@@ -446,6 +490,19 @@ export async function montarProposta({ repo, ordem }) {
   if (!apiKey) return { ok: false, erros: ['sem chave da Anthropic'] }
   if (!REPOS_PERMITIDOS.includes(repo)) {
     return { ok: false, erros: ['esse repositorio nao e meu'] }
+  }
+
+  // Conferir ANTES de gastar a primeira chamada paga: sem o espelho, as 14
+  // voltas seriam 14 chamadas para descobrir que nao da para ler nada.
+  const espelho = await garantirEspelho(repo)
+  if (!espelho.ok) {
+    return {
+      ok: false,
+      erros: [
+        `nao consigo ler o ${repo} aqui na maquina — a copia dele nao esta ` +
+          'presente. Rode o doutor na VPS',
+      ],
+    }
   }
 
   const comecou = Date.now()

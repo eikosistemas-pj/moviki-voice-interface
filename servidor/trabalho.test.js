@@ -76,3 +76,33 @@ test('termo curto demais nao vira varredura no repositorio inteiro', async () =>
   const r = await buscar(REPO, 'a')
   assert.match(r, /texto maior/)
 })
+
+// ---------------------------------------------------------------------------
+// ESPELHO AUSENTE NAO PODE VIRAR "NAO EXISTE"
+// ---------------------------------------------------------------------------
+//
+// 18/09/2026: o Zeus disse ao Paulo que "a leitura nao volta" e que a
+// newsletter nao existia. Se a copia local do repositorio nao estivesse na
+// maquina, a busca percorria uma pasta inexistente e respondia "(nao achei
+// esse texto em lugar nenhum)" — que e MENTIRA.
+//
+// A diferenca entre "nao achei" e "nao consigo ler" e enorme: a primeira faz
+// ele desistir; a segunda faz ele avisar que falta coisa na maquina.
+
+test('repositorio sem copia local diz que NAO CONSEGUE LER, nao que nao achou', async () => {
+  const r = await buscar('moviki-ai', 'newsletter')
+  assert.match(r, /NAO CONSIGO LER/, `respondeu: ${r.slice(0, 120)}`)
+  assert.match(r, /NAO QUER DIZER QUE O QUE VOCE PROCURA NAO EXISTE/)
+  assert.doesNotMatch(r, /nao achei esse texto/)
+})
+
+test('ler sem copia local tambem nao mente', async () => {
+  const r = await ler('moviki-ai', 'index.html')
+  assert.match(r, /NAO CONSIGO LER/)
+})
+
+test('com a copia presente, a busca volta a responder normalmente', async () => {
+  // A cerca nova nao pode atrapalhar quem esta com tudo no lugar.
+  const r = await buscar(REPO, 'Entrar no painel')
+  assert.match(r, /index\.html:/)
+})

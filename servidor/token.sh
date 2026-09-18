@@ -18,6 +18,8 @@
 #
 # USO
 #   bash servidor/token.sh                   poe/troca o token do GitHub
+#   bash servidor/token.sh ghp_xxxxx         idem, com o token na propria linha
+#   VER_TOKEN=1 bash servidor/token.sh       idem, mostrando o que voce cola
 #   bash servidor/token.sh --modelo-rapido   poe a conversa no modelo rapido
 #   bash servidor/token.sh --ver             mostra o que esta configurado
 
@@ -107,9 +109,25 @@ so precisa PROPOR — quem junta na main e voce.
 
 FIM
 
-read -r -s -p "Token: " NOVO
-echo
+# O TOKEN PODE VIR DE TRES JEITOS, E ISSO NAO E LUXO.
+#
+# 18/09/2026: o token sumiu duas vezes. A leitura escondida (`read -s`) nao
+# mostra nada na tela enquanto se cola — e quem cola e nao ve nada conclui que
+# nao funcionou, aperta Enter, e grava VAZIO. A opcao de ver o que se digita
+# deixou de ser detalhe.
+NOVO="${1:-}"
+if [ -n "$NOVO" ]; then
+  echo "(token recebido pela linha de comando)"
+elif [ "${VER_TOKEN:-0}" = "1" ]; then
+  read -r -p "Token (aparece na tela): " NOVO
+else
+  echo "Dica: nada aparece na tela enquanto voce cola. E normal — cole e de Enter."
+  echo "      Se preferir VER o que esta colando: VER_TOKEN=1 bash servidor/token.sh"
+  read -r -s -p "Token: " NOVO
+  echo
+fi
 NOVO="$(printf '%s' "$NOVO" | tr -d '[:space:]')"
+echo "Recebi ${#NOVO} caracteres."
 
 if [ -z "$NOVO" ]; then
   echo "Nada digitado. Nao mexi em nada." >&2

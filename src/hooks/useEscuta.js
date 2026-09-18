@@ -27,7 +27,24 @@ export function useEscuta({ idioma = 'pt-BR', aoFinalizar } = {}) {
     typeof window !== 'undefined' &&
     (window.SpeechRecognition || window.webkitSpeechRecognition)
 
-  const suportado = Boolean(Reconhecimento)
+  /**
+   * ENDERECO SEGURO — e a metade que faltava para o microfone do celular.
+   *
+   * 18/09/2026: o Paulo abriu no celular e o microfone nao funcionou. Nao e
+   * defeito do Zeus nem do aparelho: navegador nenhum entrega microfone a uma
+   * pagina sem cadeado. `localhost` e a unica excecao, e por isso no
+   * computador dele as vezes funciona e no celular nunca.
+   *
+   * Sem esta conferencia, o botao simplesmente nao fazia nada — e botao morto
+   * sem explicacao faz a pessoa achar que o robo quebrou.
+   */
+  const enderecoSeguro =
+    typeof window === 'undefined' ||
+    window.isSecureContext === true ||
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+
+  const suportado = Boolean(Reconhecimento) && enderecoSeguro
 
   useEffect(() => {
     if (!suportado) return
@@ -129,5 +146,5 @@ export function useEscuta({ idioma = 'pt-BR', aoFinalizar } = {}) {
     }
   }, [])
 
-  return { comecar, encerrar, ouvindo, parcial, erro, suportado }
+  return { comecar, encerrar, ouvindo, parcial, erro, suportado, enderecoSeguro }
 }

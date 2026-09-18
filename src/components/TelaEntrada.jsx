@@ -6,7 +6,16 @@ import { useState } from 'react'
  * Sobria de proposito: o Zeus so aparece depois. Quem chegar aqui sem senha
  * nao descobre nada sobre o Moviki nem sobre quem e o dono — nem o nome da
  * empresa esta escrito.
+ *
+ * A FRASE E DO PAULO, PALAVRA POR PALAVRA (18/09/2026).
+ * Nao mexer no texto sem ele pedir: e a voz do Zeus se apresentando, e o tom
+ * foi escolhido por ele. Repare que ela tambem nao entrega nada — fala de
+ * "conhecimento" e "mestre", nao de Moviki, nem de lojista, nem de dono.
  */
+export const SAUDACAO =
+  'Só darei acesso a todo meu conhecimento, se você provar que é o meu mestre... ' +
+  'Digite a senha, caso contrário estará destinado ao fracasso, comece...'
+
 export default function TelaEntrada({ aoEntrar, erro, entrando }) {
   const [senha, setSenha] = useState('')
 
@@ -17,8 +26,16 @@ export default function TelaEntrada({ aoEntrar, erro, entrando }) {
 
   return (
     <main className="flex h-full w-full items-center justify-center bg-movic-obsidiana px-6">
-      <form onSubmit={enviar} className="w-full max-w-xs text-center">
+      <form onSubmit={enviar} className="w-full max-w-sm text-center">
         <div className="mx-auto mb-8 h-px w-40 bg-gradient-to-r from-transparent via-movic-neon/45 to-transparent" />
+
+        {/*
+          A saudacao vem ANTES do campo, e com folga em volta: ela e a primeira
+          coisa que o Zeus diz, e tem que ser lida antes de a mao ir ao teclado.
+        */}
+        <p className="mb-8 text-[13px] leading-relaxed tracking-wide text-movic-neon/70">
+          {SAUDACAO}
+        </p>
 
         <input
           type="password"

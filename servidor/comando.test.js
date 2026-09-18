@@ -5,7 +5,12 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { assuntoVedado, entender } from './comando.js'
+import {
+  assuntoVedado,
+  entender,
+  pareceTrabalho,
+  repoDoAssunto,
+} from './comando.js'
 import { NUNCA_SOZINHO, PEDIDOS } from '../lib/turno.js'
 
 test('"Zeus, assuma daqui" passa o posto', () => {
@@ -125,4 +130,41 @@ test('chamar o Zeus pelo nome NAO vira assunto proibido', () => {
 
 test('o proprio Zeus esta na lista que nunca e do robo', () => {
   assert.ok(NUNCA_SOZINHO.includes('o_proprio_zeus'))
+})
+
+// --- Em que repositorio o Paulo esta falando ------------------------------
+
+test('reconhece o repositorio pelo que o Paulo fala', () => {
+  // Ele nao diz "moviki-app": ele diz "o painel do lojista".
+  assert.equal(repoDoAssunto('muda o texto do painel do lojista'), 'moviki-app')
+  assert.equal(repoDoAssunto('ajusta a videoaula'), 'moviki-app')
+  assert.equal(repoDoAssunto('muda a pagina de venda do site'), 'moviki')
+  assert.equal(repoDoAssunto('altera o post do instagram'), 'moviki-assistente-social')
+  assert.equal(repoDoAssunto('muda o tom do atendente'), 'moviki-ai')
+})
+
+test('o atendente do painel e do moviki-ai, nao do moviki-app', () => {
+  // A ordem da lista existe por isto: a frase tem "painel" dentro.
+  assert.equal(repoDoAssunto('muda o atendente da caixa de mensagens do painel'), 'moviki-ai')
+})
+
+test('assunto de dinheiro aponta para o robo — para a recusa ser a certa', () => {
+  // Ele esta fora do alcance do Zeus, mas precisa ser RECONHECIDO: assim a
+  // resposta e "nao encosto no robo do dinheiro" em vez de "nao entendi".
+  assert.equal(repoDoAssunto('muda a comissao do parceiro'), 'moviki-robo')
+  assert.equal(repoDoAssunto('mexe no webhook do asaas'), 'moviki-robo')
+})
+
+test('frase sem pista nao chuta repositorio', () => {
+  assert.equal(repoDoAssunto('muda aquilo la'), null)
+  assert.equal(repoDoAssunto(''), null)
+})
+
+test('so e trabalho quando tem verbo de mudanca', () => {
+  // Errar para o lado da conversa nao custa nada — o Paulo repete. Errar para
+  // o lado do trabalho abre Pull Request que ninguem pediu.
+  assert.equal(pareceTrabalho('como esta o painel do lojista'), false)
+  assert.equal(pareceTrabalho('me fala das videoaulas'), false)
+  assert.equal(pareceTrabalho('muda o texto do painel'), true)
+  assert.equal(pareceTrabalho('altera a videoaula'), true)
 })

@@ -131,6 +131,55 @@ const ASSUNTOS = [
   ['apagar', /\b(repositorio|colecao|banco|conta|backup)\b/],
 ]
 
+// ---------------------------------------------------------------------------
+// EM QUE REPOSITORIO O PAULO ESTA FALANDO
+// ---------------------------------------------------------------------------
+//
+// Ele nao diz "moviki-app": ele diz "o painel do lojista". A ligacao entre o
+// que ele fala e onde o codigo mora esta no mapa mestre, e aqui vira lista.
+//
+// Sem isso, o Zeus teria que perguntar "em qual repositorio?" a cada ordem —
+// e assistente que devolve pergunta de programador nao serve ao Paulo.
+//
+// `moviki-robo` esta na lista DE PROPOSITO, mesmo estando fora do alcance
+// dele: assim, pedir mexida no dinheiro recebe a recusa certa ("nao encosto
+// no robo do dinheiro") em vez do vago "nao entendi onde e".
+const ONDE_MORA = [
+  ['moviki-robo', /\b(dinheiro|assinatura|assinaturas|asaas|comissao|comissoes|saque|saques|cobranca|webhook|trial|fatura|inadimplen)/],
+  ['moviki-ai', /\b(atendente|atendimento|bot|robo de conversa|caixa de mensagens|vik|whatsapp)/],
+  ['moviki-assistente-social', /\b(instagram|facebook|rede social|redes sociais|post|posts|reel|reels|feed|calendario de posts)/],
+  ['moviki-app', /\b(painel|lojista|parceiro|videoaula|videoaulas|aula|aulas|cardapio|cadastro|material de apoio|cracha|eikoadm)/],
+  ['moviki', /\b(site|vitrine|pagina publica|pagina de venda|landing|seo|sitemap|termos|live publica|mapa de negocios)/],
+]
+
+/**
+ * De qual repositorio o Paulo esta falando, ou null se nao der para saber.
+ *
+ * A ordem da lista importa: "o atendente do painel" e do moviki-ai, nao do
+ * moviki-app, embora contenha a palavra "painel".
+ */
+export function repoDoAssunto(frase) {
+  const t = normalizar(frase)
+  if (!t) return null
+  for (const [repo, re] of ONDE_MORA) {
+    if (re.test(t)) return repo
+  }
+  return null
+}
+
+/**
+ * A frase e uma ordem de TRABALHO (mexer no codigo) ou so conversa?
+ *
+ * Trabalho exige verbo de mudanca. "Como esta o painel?" e conversa; "muda o
+ * texto do painel" e trabalho. Errar para o lado da conversa nao custa nada
+ * — o Paulo repete com outras palavras. Errar para o lado do trabalho abre
+ * Pull Request que ninguem pediu.
+ */
+export function pareceTrabalho(frase) {
+  const t = normalizar(frase)
+  return Boolean(t) && VERBO_DE_MUDANCA.test(t)
+}
+
 /**
  * Devolve o assunto vedado da frase, ou null.
  *

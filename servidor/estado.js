@@ -105,6 +105,49 @@ export function lembrarFala(estado, papel, texto) {
   return estado
 }
 
+// ---------------------------------------------------------------------------
+// AS TAREFAS — trabalho que corre por fora da conversa
+// ---------------------------------------------------------------------------
+//
+// Mexer no codigo leva minutos; a conversa e em voz alta. Entao o Zeus diz
+// "vou trabalhar nisso" na hora e o trabalho corre por fora. Quando termina,
+// o resultado fica guardado aqui ate ele conseguir contar — na proxima vez
+// que o Paulo falar, ou no relatorio de chegada.
+//
+// Sem essa fila, o Paulo ficaria ouvindo silencio por dois minutos, ou pior:
+// descobriria o Pull Request por acaso, dias depois, sem lembrar de ter
+// pedido.
+
+export function abrirTarefa(estado, { ordem, repo }) {
+  const id = `t${Date.now().toString(36)}`
+  estado.tarefas = [
+    ...(estado.tarefas || []),
+    { id, ordem, repo, estado: 'trabalhando', em: new Date().toISOString(), contada: false },
+  ].slice(-50)
+  return id
+}
+
+export function fecharTarefa(estado, id, resultado) {
+  estado.tarefas = (estado.tarefas || []).map((t) =>
+    t.id === id
+      ? { ...t, ...resultado, estado: resultado.ok ? 'pronta' : 'falhou', fimEm: new Date().toISOString() }
+      : t
+  )
+  return estado
+}
+
+/** O que ele ainda nao conseguiu contar ao Paulo. */
+export function tarefasParaContar(estado) {
+  return (estado.tarefas || []).filter((t) => !t.contada && t.estado !== 'trabalhando')
+}
+
+export function marcarContadas(estado) {
+  estado.tarefas = (estado.tarefas || []).map((t) =>
+    t.estado === 'trabalhando' ? t : { ...t, contada: true }
+  )
+  return estado
+}
+
 /** O que o Zeus fez desde que o turno abriu — o relatorio de chegada. */
 export function trilhaDoTurno(estado) {
   const desde = estado.turno?.abertoEm

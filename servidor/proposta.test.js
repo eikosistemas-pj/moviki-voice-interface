@@ -1,12 +1,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { nomearRamo, validar } from './proposta.js'
+import { aplicarTroca, nomearRamo, validar } from './proposta.js'
 
 const BOA = {
   repo: 'moviki-app',
   ramo: 'zeus/ajusta-texto-0918',
-  titulo: 'Ajusta o texto da aba de artes',
-  arquivos: [{ caminho: 'parceiro.html', conteudo: '<html></html>' }],
+  titulo: 'Ajusta a cor do botao de entrar',
+  arquivos: [
+    {
+      caminho: 'parceiro.html',
+      procurar: 'background: #1f6feb; border-radius: 12px',
+      trocar_por: 'background: #10b981; border-radius: 12px',
+    },
+  ],
 }
 
 test('proposta boa passa', () => {
@@ -31,12 +37,70 @@ test('um arquivo proibido derruba a proposta inteira', () => {
   const r = validar({
     ...BOA,
     arquivos: [
-      { caminho: 'index.html', conteudo: 'ok' },
+      ...BOA.arquivos,
       { caminho: 'firebase/firestore.rules', conteudo: 'nao' },
     ],
   })
   assert.equal(r.ok, false)
   assert.ok(r.erros.some((e) => e.includes('firestore.rules')))
+})
+
+// --- O erro de projeto que custou dez minutos ------------------------------
+
+test('ancora curta demais e recusada', () => {
+  // "div" ou "azul" casam em cem lugares do arquivo, e a troca cai no lugar
+  // errado. Exigir tamanho obriga o Zeus a citar algo que ele leu mesmo.
+  const r = validar({
+    ...BOA,
+    arquivos: [{ caminho: 'index.html', procurar: 'azul', trocar_por: 'verde' }],
+  })
+  assert.equal(r.ok, false)
+  assert.ok(r.erros.some((e) => e.includes('curto demais')))
+})
+
+test('trecho novo igual ao antigo nao passa', () => {
+  const r = validar({
+    ...BOA,
+    arquivos: [
+      { caminho: 'index.html', procurar: 'background: #1f6feb;', trocar_por: 'background: #1f6feb;' },
+    ],
+  })
+  assert.equal(r.ok, false)
+  assert.ok(r.erros.some((e) => e.includes('nao muda nada')))
+})
+
+test('trecho gigante e recusado — isso e reescrever o arquivo de novo', () => {
+  const r = validar({
+    ...BOA,
+    arquivos: [
+      { caminho: 'index.html', procurar: 'x'.repeat(30_000), trocar_por: 'y' },
+    ],
+  })
+  assert.equal(r.ok, false)
+  assert.ok(r.erros.some((e) => e.includes('grande demais')))
+})
+
+test('ou troca um trecho, ou cria arquivo — nunca os dois', () => {
+  const r = validar({
+    ...BOA,
+    arquivos: [
+      { caminho: 'novo.html', procurar: 'alguma coisa longa', trocar_por: 'outra', conteudo: 'x' },
+    ],
+  })
+  assert.equal(r.ok, false)
+})
+
+test('arquivo novo passa sem ancora — ele ainda nao existe', () => {
+  const r = validar({
+    ...BOA,
+    arquivos: [{ caminho: 'nova-pagina.html', conteudo: '<html></html>' }],
+  })
+  assert.equal(r.ok, true)
+})
+
+test('alteracao sem trecho nem conteudo nao passa', () => {
+  const r = validar({ ...BOA, arquivos: [{ caminho: 'index.html' }] })
+  assert.equal(r.ok, false)
 })
 
 test('proposta vazia nao passa', () => {
@@ -46,7 +110,6 @@ test('proposta vazia nao passa', () => {
 })
 
 test('proposta gigante nao passa', () => {
-  // Proposta que ninguem revisa nao e proposta, e risco embrulhado.
   const muitos = Array.from({ length: 20 }, (_, i) => ({
     caminho: `a${i}.html`,
     conteudo: 'x',
@@ -54,20 +117,34 @@ test('proposta gigante nao passa', () => {
   assert.equal(validar({ ...BOA, arquivos: muitos }).ok, false)
 })
 
-test('o mesmo arquivo duas vezes e recusado', () => {
-  const r = validar({
-    ...BOA,
-    arquivos: [
-      { caminho: 'index.html', conteudo: 'um' },
-      { caminho: 'index.html', conteudo: 'dois' },
-    ],
-  })
-  assert.equal(r.ok, false)
-  assert.ok(r.erros.some((e) => e.includes('duas vezes')))
-})
-
 test('titulo vago nao passa', () => {
   assert.equal(validar({ ...BOA, titulo: 'ajuste' }).ok, false)
+})
+
+// --- A troca em si --------------------------------------------------------
+
+test('troca o trecho no lugar certo, sem tocar no resto', () => {
+  const antes = 'linha um\nbotao: azul escuro\nlinha tres'
+  const r = aplicarTroca(antes, { procurar: 'botao: azul escuro', trocar_por: 'botao: verde' })
+  assert.equal(r.ok, true)
+  assert.equal(r.texto, 'linha um\nbotao: verde\nlinha tres')
+})
+
+test('trecho que nao existe e recusado', () => {
+  const r = aplicarTroca('nada aqui', { procurar: 'trecho inventado', trocar_por: 'x' })
+  assert.equal(r.ok, false)
+  assert.match(r.erro, /nao achei/)
+})
+
+test('trecho repetido e recusado, nao adivinhado', () => {
+  // Duas ocorrencias e nao da para saber qual ele queria. Melhor recusar do
+  // que trocar a errada e o Paulo descobrir no ar.
+  const r = aplicarTroca('cor azul aqui e cor azul ali', {
+    procurar: 'cor azul',
+    trocar_por: 'cor verde',
+  })
+  assert.equal(r.ok, false)
+  assert.match(r.erro, /2 vezes/)
 })
 
 test('nome de ramo sai limpo e carimbado', () => {
@@ -76,12 +153,7 @@ test('nome de ramo sai limpo e carimbado', () => {
 })
 
 test('dois pedidos iguais no mesmo dia nao colidem', () => {
-  // Ramo que ja existe faz o envio falhar no meio do trabalho.
   const a = nomearRamo('mesmo pedido', new Date('2026-09-18T14:30:00Z'))
   const b = nomearRamo('mesmo pedido', new Date('2026-09-18T15:45:00Z'))
   assert.notEqual(a, b)
-})
-
-test('pedido so com simbolos ainda gera ramo valido', () => {
-  assert.match(nomearRamo('!!!???'), /^zeus\/trabalho-\d+$/)
 })

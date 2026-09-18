@@ -193,6 +193,79 @@ Pull Request dias depois sem lembrar de ter pedido.
 `moviki-assistente-social`. Se não der para saber, ele pergunta em vez de
 chutar.
 
+### A demora, e o que foi feito com ela
+
+O Paulo reclamou do tempo entre falar e ouvir. Ele vinha de dois lugares, e os
+dois foram atacados em 18/09/2026:
+
+**O modelo.** A conversa passou para `claude-haiku-4-5`. Com o mapa mestre no
+prompt, a diferença de qualidade numa resposta de três frases é pequena, e a
+de tempo é enorme. O modelo forte ficou onde importa — em `trabalho.js`, que
+lê código e escreve alteração. Quem quiser o forte também na conversa troca
+`ZEUS_MODELO` na VPS.
+
+**A voz.** O Kokoro só devolve o áudio quando termina a resposta inteira, e a
+máquina tem um processador só: quatro frases levam quatro vezes mais que uma,
+e nesse tempo todo o Zeus fica mudo. Agora a resposta é partida em pedaços e
+cada um é sintetizado **enquanto o anterior toca**. O tempo até a última
+palavra é quase o mesmo; o tempo até a primeira cai para uma fração — e é esse
+que a pessoa chama de "demora".
+
+Um de cada vez, de propósito: com um processador só, mandar todos os pedidos
+juntos faz os pedaços brigarem pela mesma CPU e todos chegarem mais tarde.
+
+O registro agora mostra quanto ele demorou pensando em cada resposta. Sem
+medir, "está lento" vira discussão de opinião.
+
+### O aviso quando termina
+
+O trabalho corre por fora da conversa. Sem aviso, o Paulo teria que ficar
+espiando o repositório, ou descobriria o Pull Request muito depois.
+
+A tela pergunta ao servidor, de doze em doze segundos, se há novidade —
+**o servidor não empurra**, porque navegador não tem campainha e montar um cano
+aberto só para isso seria peso a mais numa máquina de 2 GB. A rota não pensa
+nem gasta chamada paga: devolve o que já estava guardado.
+
+**Ele não corta a fala de ninguém:** só avisa com o microfone fechado e com ele
+calado. E a frase é montada no servidor, não pelo cérebro — avisar não é
+pensar, e passar pelo modelo custaria dinheiro e segundos para dizer uma frase
+que já se sabe qual é.
+
+O link não é falado: soletrar endereço em voz alta é tortura. Ele volta na
+resposta escrita.
+
+### A ronda — ele chamando você por conta própria
+
+O aviso conta o que o Zeus **fez**. A ronda conta o que ele **percebeu** —
+coisa que ninguém pediu para ele olhar. É a diferença entre um funcionário que
+entrega o que foi mandado e um que bate na porta para avisar que tem fumaça
+saindo da cozinha.
+
+De cinco em cinco minutos ele confere quatro coisas e, havendo o que dizer,
+chama você pelo nome na primeira brecha em que você não estiver falando:
+
+| O que ele percebe | Por que importa |
+|---|---|
+| A voz caiu | Ele pensa mas não fala, e você só descobriria ao tentar conversar |
+| A máquina apertando de memória | Já aconteceu nesta VPS: sem memória o sistema mata programas, e a voz é a primeira a morrer |
+| Pull Request parado há mais de 6 horas | Enquanto você não aprova, o trabalho não está no ar — e ninguém mais vai lembrar |
+| O teto de falas do dia chegando | Emudecer sem avisar deixaria você achando que quebrou |
+
+**O perigo aqui é o excesso, não a falta.** Assistente que fala demais é
+desligado na primeira semana — e aí não avisa nem o que importava. Três regras
+duras, todas travadas por teste:
+
+1. **Cada assunto fala uma vez.** Enquanto a situação não mudar, ele cala por
+   seis horas.
+2. **Tem descanso entre avisos.** Mesmo com três coisas erradas ao mesmo
+   tempo, ele conta uma e espera dez minutos.
+3. **Só o que você pode resolver.** "A memória está em 61%" não é aviso, é
+   ruído.
+
+Nada disso passa pelo cérebro: perceber não é pensar. São contas que a máquina
+faz de graça e na hora, e as frases já se sabe quais são.
+
 ## O botão de pânico
 
 O Zeus nunca pode se trancar por dentro. A garantia não depende dele:

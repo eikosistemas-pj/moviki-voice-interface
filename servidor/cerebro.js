@@ -12,22 +12,31 @@
 //   ZEUS_MODELO         opcional. Padrao abaixo.
 //   ZEUS_TIMEOUT        opcional, em ms. Padrao 30000.
 //
-// MODELO
-// O padrao e `claude-opus-5` de proposito: o Zeus decide no lugar do Paulo
-// quando ele nao esta, e isso nao e trabalho de modelo pequeno. Trocar por
-// `claude-haiku-4-5` na variavel deixa muito mais barato e um pouco mais
-// burro, sem novo deploy — a decisao e do Paulo, nao minha.
+// MODELO — rapido para CONVERSAR, forte para TRABALHAR
+//
+// Aqui e conversa, e conversa e medida em segundos de espera. O Paulo
+// reclamou da demora em 18/09/2026, e metade dela era o modelo grande
+// pensando antes de cada frase falada.
+//
+// Entao a conversa passou para `claude-haiku-4-5`: com o mapa mestre no
+// prompt, a diferenca de qualidade numa resposta de tres frases e pequena, e
+// a diferenca de tempo e enorme. O modelo forte continua onde importa — em
+// servidor/trabalho.js, que le codigo e escreve alteracao, onde pensar bem
+// vale mais que responder rapido.
+//
+// Quem quiser o forte tambem na conversa troca ZEUS_MODELO na VPS, sem novo
+// deploy. Vai ficar mais lento e mais caro; e escolha do Paulo.
 //
 // POR QUE `effort: low`
-// Isto e voz, nao relatorio. O Paulo esta esperando o Zeus responder em voz
-// alta: resposta curta e rapida vale mais que raciocinio longo. Em rota de
-// conversa o esforco baixo segura a qualidade e derruba o tempo de espera.
+// Isto e voz, nao relatorio. Resposta curta e rapida vale mais que raciocinio
+// longo. Em rota de conversa o esforco baixo segura a qualidade e derruba o
+// tempo de espera.
 //
 // TIMEOUT E OBRIGATORIO
 // Sem ele, uma chamada travada deixa o Zeus mudo de boca aberta, sem dizer
 // nem que deu errado. Melhor ele falar "nao consegui" do que emudecer.
 
-const MODELO_PADRAO = 'claude-opus-5'
+const MODELO_PADRAO = 'claude-haiku-4-5'
 const TIMEOUT_PADRAO = 30000
 
 /** Teto de resposta. Voz longa cansa: o Zeus fala, nao redige. */
@@ -58,8 +67,9 @@ com voce e voce aciona o time. Quando ele nao esta, voce fica no lugar dele.
 COMO VOCE FALA
 - Portugues do Brasil, direto, sem rodeio.
 - Voce esta sendo OUVIDO, nao lido: frases curtas, sem lista, sem markdown,
-  sem endereco de site soletrado. No maximo tres ou quatro frases, a nao ser
-  que o Paulo peca detalhe.
+  sem endereco de site soletrado. DUAS OU TRES FRASES, no maximo — cada frase
+  a mais e mais tempo que o Paulo passa esperando o audio sair. Se ele quiser
+  detalhe, ele pede.
 - Nada de codigo. Explique em linguagem de negocio: o que muda para o
   lojista, para o parceiro, para o Paulo.
 - Trate o Paulo por voce, sem cerimonia. Voce trabalha com ele ha tempo.
@@ -196,6 +206,8 @@ export async function pensar({ system, historico, falaNova }) {
     }
   }, limite)
 
+  const comecou = Date.now()
+
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -227,7 +239,8 @@ export async function pensar({ system, historico, falaNova }) {
     // em silencio. Um byte mudado no comeco do prompt basta para isso.
     const u = dados.usage || {}
     console.log(
-      `[zeus] tokens: ${u.input_tokens || 0} novos, ` +
+      `[zeus] pensou em ${((Date.now() - comecou) / 1000).toFixed(1)}s — ` +
+        `${u.input_tokens || 0} tokens novos, ` +
         `${u.cache_read_input_tokens || 0} do cache, ` +
         `${u.output_tokens || 0} de resposta`
     )

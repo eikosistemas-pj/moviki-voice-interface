@@ -148,6 +148,31 @@ export function marcarContadas(estado) {
   return estado
 }
 
+// ---------------------------------------------------------------------------
+// OS CHAMADOS DO VIGIA — o que ele percebeu e quer contar
+// ---------------------------------------------------------------------------
+//
+// Separado das tarefas de proposito: tarefa e o que ELE FEZ; chamado e o que
+// ELE PERCEBEU. Misturar os dois faria "terminei o botao" e "a maquina esta
+// apertando" virarem a mesma coisa na hora de decidir o que ja foi dito.
+
+export function enfileirarChamado(estado, chave, fala) {
+  estado.chamados = [...(estado.chamados || []), { chave, fala }].slice(-10)
+  // Guarda QUANDO cada assunto foi levantado: e isso que impede o Zeus de
+  // repetir o mesmo aviso de doze em doze segundos.
+  estado.chamadosDados = { ...(estado.chamadosDados || {}), [chave]: Date.now() }
+  return estado
+}
+
+export function chamadosPendentes(estado) {
+  return estado.chamados || []
+}
+
+export function limparChamados(estado) {
+  estado.chamados = []
+  return estado
+}
+
 /** O que o Zeus fez desde que o turno abriu — o relatorio de chegada. */
 export function trilhaDoTurno(estado) {
   const desde = estado.turno?.abertoEm

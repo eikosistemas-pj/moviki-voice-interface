@@ -27,7 +27,7 @@ import { promisify } from 'node:util'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { REPOS_PERMITIDOS } from './maos.js'
-import { validar } from './proposta.js'
+import { aplicarTroca, validar } from './proposta.js'
 
 const executar = promisify(execFile)
 
@@ -115,6 +115,35 @@ export async function executarProposta(proposta) {
     // caminho que so escapa depois de juntado com a pasta.
     if (!path.resolve(destino).startsWith(path.resolve(pasta) + path.sep)) {
       return { ok: false, erros: [`${a.caminho}: sai da pasta do projeto`] }
+    }
+
+    if (typeof a.procurar === 'string') {
+      // TROCA DE TRECHO. A ancora ja foi conferida contra o espelho em
+      // trabalho.js, mas e conferida DE NOVO aqui, contra a copia de
+      // trabalho: entre uma coisa e outra alguem pode ter mexido no
+      // repositorio, e trocar no lugar errado e pior que nao trocar.
+      let atual = ''
+      try {
+        atual = await fs.readFile(destino, 'utf8')
+      } catch {
+        return { ok: false, erros: [`${a.caminho}: esse arquivo nao existe`] }
+      }
+      const r = aplicarTroca(atual, a)
+      if (!r.ok) return { ok: false, erros: [`${a.caminho}: ${r.erro}`] }
+      await fs.writeFile(destino, r.texto, 'utf8')
+      continue
+    }
+
+    // ARQUIVO NOVO. Se ja existir, isto seria sobrescrever as cegas — o
+    // caminho para apagar trabalho alheio sem nem ter lido.
+    try {
+      await fs.access(destino)
+      return {
+        ok: false,
+        erros: [`${a.caminho}: esse arquivo ja existe; troque um trecho dele`],
+      }
+    } catch {
+      /* nao existe, e e isso que se espera de arquivo novo */
     }
     await fs.mkdir(path.dirname(destino), { recursive: true })
     await fs.writeFile(destino, a.conteudo, 'utf8')

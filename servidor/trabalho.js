@@ -2,77 +2,114 @@
 //
 // O ZEUS TRABALHANDO — de ordem falada a proposta de alteracao.
 //
-// COMO FUNCIONA
-// O cerebro recebe a ordem e ganha DUAS ferramentas de leitura: listar a
-// pasta e ler um arquivo. Com elas ele se orienta no codigo. Quando entende o
-// que precisa mudar, chama `propor` com os arquivos ja escritos. A proposta
-// passa pela conferencia e so entao vai para a oficina virar Pull Request.
+// ---------------------------------------------------------------------------
+// O ERRO QUE ESTE ARQUIVO CONSERTA — 18/09/2026
+// ---------------------------------------------------------------------------
+// A primeira versao dava a ele duas ferramentas: listar e ler. Ler trazia o
+// ARQUIVO INTEIRO, e propor exigia devolver o ARQUIVO INTEIRO de volta.
 //
-// AS TRES CERCAS, E POR QUE SAO TRES
+// No primeiro uso real o Paulo pediu para trocar a cor de um botao e o Zeus
+// ficou dez minutos sem entregar nada. O motivo estava no tamanho dos
+// arquivos do Moviki:
 //
-//   1. Ele NAO TEM ferramenta de escrever, nem de rodar comando. As unicas
-//      coisas que sabe fazer aqui sao ler e propor. O que nao existe nao pode
-//      ser usado torto.
-//   2. A leitura respeita `podeMexer`: ele nao le o que nao pode alterar.
-//      Ler o arquivo de segredos nao seria alteracao — seria vazamento.
-//   3. Toda proposta passa pela conferencia ANTES da oficina, mesmo que a
-//      instrucao ja mande nao pedir nada proibido. Instrucao e pedido; a
-//      conferencia e trava.
+//   moviki-app/index.html      568.633 caracteres
+//   moviki-app/parceiro.html   327.492
+//   moviki/404.html            264.808
 //
-// E TEM TETO DE IDAS E VINDAS
-// Cerebro perdido no codigo fica lendo arquivo para sempre, e cada ida e uma
-// chamada paga. Depois do teto ele para e diz que nao deu.
+// Ele lia um pedaco truncado, tentava reescrever meio milhao de caracteres,
+// batia no teto da resposta e recomecava. Dez minutos queimando dinheiro
+// contra uma parede — e a parede era o meu desenho, nao a maquina dele.
+//
+// COMO FICOU
+//   buscar  acha o trecho no repositorio inteiro, sem carregar arquivo
+//   ler     traz uma JANELA de linhas em volta, nao o arquivo todo
+//   propor  troca um TRECHO por outro, nao reescreve nada
+//
+// Trocar uma cor passou de meio milhao de caracteres para algumas dezenas.
+//
+// AS CERCAS CONTINUAM AS MESMAS
+//   1. Ele nao tem ferramenta de escrever nem de rodar comando. O que nao
+//      existe nao pode ser usado torto.
+//   2. Leitura e busca respeitam `podeMexer`: ele nao le o que nao pode
+//      alterar. Ler segredo nao seria alteracao — seria vazamento.
+//   3. Toda proposta passa pela conferencia antes da oficina, e a ancora e
+//      conferida contra o arquivo de verdade AQUI, para ele poder corrigir
+//      sozinho em vez de falhar no fim.
 
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { podeMexer, REPOS_PERMITIDOS } from './maos.js'
-import { nomearRamo, validar } from './proposta.js'
+import { aplicarTroca, nomearRamo, validar } from './proposta.js'
 
 /** Onde ele LE para trabalhar: o espelho, que e so leitura. */
 const ESPELHO = process.env.ZEUS_ESPELHO || '/root/eikosistemas'
 
 /** Quantas idas e vindas antes de desistir. */
-const MAX_VOLTAS = Number(process.env.ZEUS_MAX_VOLTAS || 12)
+const MAX_VOLTAS = Number(process.env.ZEUS_MAX_VOLTAS || 14)
 
-// Aqui NAO se economiza. Conversar rapido e uma coisa; ler codigo e escrever
-// alteracao que o Paulo vai aprovar e outra. O modelo forte fica onde o erro
-// custa caro — e trabalho corre por fora da conversa, entao o tempo dele nao
-// deixa ninguem esperando na frente da tela.
+// Aqui NAO se economiza modelo. Conversar rapido e uma coisa; ler codigo e
+// escrever alteracao que o Paulo vai aprovar e outra. E o trabalho corre por
+// fora da conversa, entao o tempo dele nao deixa ninguem esperando na tela.
 const MODELO = process.env.ZEUS_MODELO_TRABALHO || 'claude-opus-5'
+
+/** Linhas devolvidas por leitura quando ele nao diz quantas. */
+const JANELA_PADRAO = 80
+
+/** Acima disso, ler o arquivo inteiro e desperdicio: ele usa busca. */
+const ARQUIVO_PEQUENO = 24_000
+
+/** Quantos achados a busca devolve. Mais que isso vira ruido. */
+const MAX_ACHADOS = 40
+
+const EXTENSOES = new Set([
+  '.html', '.js', '.jsx', '.ts', '.tsx', '.css', '.json', '.md',
+  '.py', '.yml', '.yaml', '.txt', '.svg', '.sh',
+])
 
 const FERRAMENTAS = [
   {
-    name: 'listar',
+    name: 'buscar',
     description:
-      'Lista os arquivos de uma pasta do repositorio. Use para se orientar antes de ler.',
+      'Acha um texto no repositorio inteiro e devolve arquivo e linha de cada ocorrencia. COMECE SEMPRE POR AQUI: e o jeito de achar o que mudar sem carregar arquivos gigantes.',
     input_schema: {
       type: 'object',
       properties: {
-        pasta: { type: 'string', description: 'caminho da pasta; vazio para a raiz' },
+        termo: { type: 'string', description: 'texto a procurar, sem curingas' },
       },
-      required: [],
+      required: ['termo'],
     },
   },
   {
     name: 'ler',
-    description: 'Le um arquivo do repositorio.',
+    description:
+      'Le um trecho de um arquivo. Informe a linha inicial para trazer so a janela em volta; sem ela, arquivos grandes vem cortados.',
     input_schema: {
       type: 'object',
-      properties: { caminho: { type: 'string' } },
+      properties: {
+        caminho: { type: 'string' },
+        linha: { type: 'number', description: 'linha inicial (1 e a primeira)' },
+        quantas: { type: 'number', description: 'quantas linhas trazer' },
+      },
       required: ['caminho'],
+    },
+  },
+  {
+    name: 'listar',
+    description: 'Lista os arquivos de uma pasta do repositorio.',
+    input_schema: {
+      type: 'object',
+      properties: { pasta: { type: 'string' } },
+      required: [],
     },
   },
   {
     name: 'propor',
     description:
-      'Entrega a alteracao pronta. Escreva o conteudo COMPLETO de cada arquivo alterado, nao um trecho.',
+      'Entrega a alteracao. Para cada arquivo, diga o TRECHO EXATO a procurar e o trecho que entra no lugar. Nunca mande o arquivo inteiro.',
     input_schema: {
       type: 'object',
       properties: {
-        titulo: {
-          type: 'string',
-          description: 'uma linha, em portugues, explicando a alteracao',
-        },
+        titulo: { type: 'string', description: 'uma linha, em portugues' },
         resumo: { type: 'string', description: 'o que muda, em linguagem de negocio' },
         arquivos: {
           type: 'array',
@@ -80,9 +117,18 @@ const FERRAMENTAS = [
             type: 'object',
             properties: {
               caminho: { type: 'string' },
-              conteudo: { type: 'string' },
+              procurar: {
+                type: 'string',
+                description:
+                  'trecho EXATO do arquivo, copiado do que voce leu, grande o bastante para aparecer uma vez so',
+              },
+              trocar_por: { type: 'string', description: 'o que entra no lugar' },
+              conteudo: {
+                type: 'string',
+                description: 'so para ARQUIVO NOVO, que ainda nao existe',
+              },
             },
-            required: ['caminho', 'conteudo'],
+            required: ['caminho'],
           },
         },
       },
@@ -94,45 +140,139 @@ const FERRAMENTAS = [
 function instrucao(repo) {
   return `Voce e o ZEUS trabalhando no repositorio ${repo} do MOVIKI, a pedido do Paulo.
 
-COMO TRABALHAR
-Use "listar" e "ler" para entender o codigo ANTES de propor. Nunca proponha
-alteracao em arquivo que voce nao leu — reescrever por cima do que voce nao
-viu apaga o trabalho de outra pessoa.
+COMO TRABALHAR — NESTA ORDEM
+1. "buscar" o texto que voce quer mudar (a cor, a palavra, o rotulo).
+2. "ler" a janela em volta do achado, para ver o contexto.
+3. "propor" a troca do trecho.
 
-Ao propor, mande o conteudo COMPLETO do arquivo, do comeco ao fim, ja com a
-sua alteracao aplicada. Nao mande trecho, nao mande diff, nao escreva "o resto
-do arquivo continua igual".
+OS ARQUIVOS AQUI SAO ENORMES. O index.html do painel tem mais de meio milhao
+de caracteres. NUNCA tente ler um arquivo desses inteiro e NUNCA tente
+reescrever um arquivo inteiro — nao cabe na resposta e voce vai ficar preso.
+Busque, leia o trecho, troque o trecho.
+
+O TRECHO A PROCURAR PRECISA SER EXATO E UNICO
+Copie do que voce leu, com os mesmos espacos. Pegue um pedaco grande o
+bastante para aparecer uma vez so no arquivo — se aparecer duas, eu recuso e
+voce vai ter que tentar de novo com um pedaco maior.
 
 Siga o estilo do codigo que voce leu: mesma lingua nos comentarios, mesma
-indentacao, mesmos nomes. Codigo que destoa e codigo que denuncia pressa.
+indentacao, mesmos nomes.
 
 O QUE VOCE NAO FAZ
 Nao mexe em regra de seguranca, rotina automatica, segredo, preco nem no mapa
 mestre. Nao mexe no robo do dinheiro. Se a ordem exigir isso, nao proponha
 nada: explique numa frase que aquilo e do Paulo.
 
-Faca o MINIMO que resolve o pedido. Voce nao esta aqui para melhorar o que
-ninguem pediu — alteracao extra e revisao que o Paulo nao pediu e nao vai ler.`
+Faca o MINIMO que resolve o pedido. Alteracao extra e revisao que o Paulo nao
+pediu e nao vai ler.`
 }
 
-/** Le com as mesmas regras de quem escreve: nao le o que nao pode alterar. */
-async function lerDoEspelho(repo, caminho) {
+function dentroDoRepo(repo, relativo) {
+  const base = path.resolve(path.join(ESPELHO, repo))
+  const alvo = path.resolve(path.join(base, relativo || ''))
+  return alvo === base || alvo.startsWith(base + path.sep) ? alvo : null
+}
+
+/** Percorre o repositorio juntando os arquivos de texto que ele pode ver. */
+async function arquivosDeTexto(repo, pasta = '', achados = []) {
+  const alvo = dentroDoRepo(repo, pasta)
+  if (!alvo || achados.length > 3000) return achados
+
+  let itens = []
+  try {
+    itens = await fs.readdir(alvo, { withFileTypes: true })
+  } catch {
+    return achados
+  }
+
+  for (const item of itens) {
+    if (item.name === '.git' || item.name === 'node_modules' || item.name === 'dist') {
+      continue
+    }
+    const relativo = pasta ? `${pasta}/${item.name}` : item.name
+    if (item.isDirectory()) {
+      await arquivosDeTexto(repo, relativo, achados)
+    } else if (EXTENSOES.has(path.extname(item.name).toLowerCase())) {
+      // A busca obedece a mesma cerca da escrita: o que ele nao pode alterar,
+      // ele nao ve. Ler segredo nao seria alteracao — seria vazamento.
+      if (podeMexer(repo, relativo).permitido) achados.push(relativo)
+    }
+  }
+  return achados
+}
+
+/** Acha o termo no repositorio, devolvendo arquivo, linha e a linha inteira. */
+export async function buscar(repo, termo) {
+  if (!termo || termo.length < 2) return '(me diga um texto maior para procurar)'
+
+  const lista = await arquivosDeTexto(repo)
+  const achados = []
+
+  for (const relativo of lista) {
+    if (achados.length >= MAX_ACHADOS) break
+    const alvo = dentroDoRepo(repo, relativo)
+    if (!alvo) continue
+    let texto = ''
+    try {
+      texto = await fs.readFile(alvo, 'utf8')
+    } catch {
+      continue
+    }
+    if (!texto.includes(termo)) continue
+
+    const linhas = texto.split('\n')
+    for (let i = 0; i < linhas.length && achados.length < MAX_ACHADOS; i += 1) {
+      if (linhas[i].includes(termo)) {
+        achados.push(`${relativo}:${i + 1}: ${linhas[i].trim().slice(0, 160)}`)
+      }
+    }
+  }
+
+  if (!achados.length) return '(nao achei esse texto em lugar nenhum)'
+  return achados.join('\n')
+}
+
+/** Le uma janela de linhas. Sem janela, arquivo grande vem cortado. */
+export async function ler(repo, caminho, linha, quantas) {
   const veredito = podeMexer(repo, caminho)
   if (!veredito.permitido) return `(nao posso ler: ${veredito.motivo})`
+
+  const alvo = dentroDoRepo(repo, caminho)
+  if (!alvo) return '(esse caminho sai da pasta do projeto)'
+
+  let texto = ''
   try {
-    const texto = await fs.readFile(path.join(ESPELHO, repo, caminho), 'utf8')
-    return texto.length > 120_000 ? `${texto.slice(0, 120_000)}\n(cortado)` : texto
+    texto = await fs.readFile(alvo, 'utf8')
   } catch {
     return '(esse arquivo nao existe)'
   }
+
+  const linhas = texto.split('\n')
+
+  if (!Number.isFinite(linha)) {
+    if (texto.length <= ARQUIVO_PEQUENO) {
+      return linhas.map((l, i) => `${i + 1}: ${l}`).join('\n')
+    }
+    return (
+      `(este arquivo tem ${linhas.length} linhas e ${texto.length} caracteres — ` +
+      'grande demais para ler inteiro. Use "buscar" para achar a linha e volte ' +
+      'aqui dizendo a linha inicial.)'
+    )
+  }
+
+  const de = Math.max(1, Math.floor(linha) - 1)
+  const quantasLinhas = Math.min(Math.max(1, Math.floor(quantas) || JANELA_PADRAO), 400)
+  return linhas
+    .slice(de, de + quantasLinhas)
+    .map((l, i) => `${de + i + 1}: ${l}`)
+    .join('\n')
 }
 
-async function listarPasta(repo, pasta = '') {
-  if (pasta.includes('..') || pasta.startsWith('/')) return '(caminho invalido)'
+async function listar(repo, pasta = '') {
+  const alvo = dentroDoRepo(repo, pasta)
+  if (!alvo) return '(caminho invalido)'
   try {
-    const itens = await fs.readdir(path.join(ESPELHO, repo, pasta), {
-      withFileTypes: true,
-    })
+    const itens = await fs.readdir(alvo, { withFileTypes: true })
     return itens
       .filter((i) => i.name !== '.git' && i.name !== 'node_modules')
       .map((i) => (i.isDirectory() ? `${i.name}/` : i.name))
@@ -140,6 +280,35 @@ async function listarPasta(repo, pasta = '') {
   } catch {
     return '(essa pasta nao existe)'
   }
+}
+
+/**
+ * Confere as ancoras contra os arquivos de verdade.
+ *
+ * Feito AQUI, e nao so na oficina, para o Zeus poder corrigir sozinho na volta
+ * seguinte: ancora errada e o erro mais comum, e falhar no fim do trabalho
+ * desperdicaria tudo que ele leu ate aqui.
+ */
+async function conferirAncoras(repo, arquivos) {
+  const problemas = []
+  for (const a of arquivos) {
+    if (typeof a.procurar !== 'string') continue
+    const alvo = dentroDoRepo(repo, a.caminho)
+    if (!alvo) {
+      problemas.push(`${a.caminho}: caminho invalido`)
+      continue
+    }
+    let texto = ''
+    try {
+      texto = await fs.readFile(alvo, 'utf8')
+    } catch {
+      problemas.push(`${a.caminho}: esse arquivo nao existe`)
+      continue
+    }
+    const r = aplicarTroca(texto, a)
+    if (!r.ok) problemas.push(`${a.caminho}: ${r.erro}`)
+  }
+  return problemas
 }
 
 /** Recebe a ordem falada e devolve a proposta pronta, ou o motivo de nao dar. */
@@ -150,6 +319,7 @@ export async function montarProposta({ repo, ordem }) {
     return { ok: false, erros: ['esse repositorio nao e meu'] }
   }
 
+  const comecou = Date.now()
   const messages = [{ role: 'user', content: `Ordem do Paulo: ${ordem}` }]
 
   for (let volta = 0; volta < MAX_VOLTAS; volta += 1) {
@@ -162,7 +332,9 @@ export async function montarProposta({ repo, ordem }) {
       },
       body: JSON.stringify({
         model: MODELO,
-        max_tokens: 16000,
+        // Cabe folgado numa troca de trecho. Era 16000 quando ele tentava
+        // devolver o arquivo inteiro — e nem assim cabia.
+        max_tokens: 8000,
         system: instrucao(repo),
         tools: FERRAMENTAS,
         messages,
@@ -192,10 +364,35 @@ export async function montarProposta({ repo, ordem }) {
         resumo: entrega.input?.resumo,
         arquivos: entrega.input?.arquivos || [],
       }
+
       const conferencia = validar(proposta)
-      return conferencia.ok
-        ? { ok: true, proposta }
-        : { ok: false, erros: conferencia.erros }
+      const problemas = conferencia.ok
+        ? await conferirAncoras(repo, proposta.arquivos)
+        : conferencia.erros
+
+      if (!problemas.length) {
+        console.log(
+          `[zeus] trabalho pronto em ${((Date.now() - comecou) / 1000).toFixed(0)}s, ` +
+            `${volta + 1} idas e vindas`
+        )
+        return { ok: true, proposta }
+      }
+
+      // Devolve o problema para ele corrigir na volta seguinte, em vez de
+      // desistir: ancora errada e o erro mais comum, e desistir aqui jogaria
+      // fora tudo que ele leu.
+      messages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: entrega.id,
+            content: `Nao deu para aplicar: ${problemas.join('; ')}. Confira o arquivo e tente de novo com um trecho maior e exato.`,
+            is_error: true,
+          },
+        ],
+      })
+      continue
     }
 
     // Todas as leituras da rodada voltam JUNTAS, numa mensagem so: separar
@@ -203,12 +400,11 @@ export async function montarProposta({ repo, ordem }) {
     // arquivo vira uma ida e volta paga.
     const resultados = []
     for (const c of chamadas) {
-      const saida =
-        c.name === 'ler'
-          ? await lerDoEspelho(repo, c.input?.caminho || '')
-          : c.name === 'listar'
-            ? await listarPasta(repo, c.input?.pasta || '')
-            : '(nao conheco essa ferramenta)'
+      let saida = '(nao conheco essa ferramenta)'
+      if (c.name === 'buscar') saida = await buscar(repo, c.input?.termo || '')
+      else if (c.name === 'ler') {
+        saida = await ler(repo, c.input?.caminho || '', c.input?.linha, c.input?.quantas)
+      } else if (c.name === 'listar') saida = await listar(repo, c.input?.pasta || '')
       resultados.push({ type: 'tool_result', tool_use_id: c.id, content: saida })
     }
     messages.push({ role: 'user', content: resultados })

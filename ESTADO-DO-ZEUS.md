@@ -350,6 +350,89 @@ sendo dele.
 > precisa entregar é uma rota de leitura (`/api/zeus/painel`) com o estado do
 > Zeus — e ele já tem tudo que ela precisa em `servidor/estado.js`.
 
+## 4.11 🔴 "Ele escuta, aceita e não executa" — e os dois esquecimentos
+
+Fim de 18/09/2026. Três queixas do Paulo, três causas distintas, todas minhas.
+
+### 4.11.1 A ordem não virava ordem
+
+> *"Cada tarefa pedida a ele não está virando tarefa na cabeça dele. Ela não se
+> torna uma ordem. Ele escuta, aceita, mas não executa."*
+
+A causa era a lista de verbos em `comando.js`. Ela tinha `muda`, `altera`,
+`troca` — e **faltava quase tudo que uma pessoa diz de verdade**:
+
+| O que ele fala | Casava antes? |
+|---|---|
+| "arruma isso" | ❌ |
+| "coloca um botão ali" | ❌ |
+| "cria uma aba" | ❌ |
+| "conserta o rodapé" | ❌ |
+| "põe o texto novo" | ❌ |
+| "acrescenta o link" | ❌ |
+| "quero que o botão fique verde" | ❌ |
+
+Sem verbo de mudança, o pedido caía na **conversa** — e na conversa o Zeus
+responde bonito, concorda, e não abre Pull Request nenhum.
+
+**A regra que ficou escrita no arquivo, e que vale para a próxima lista dessas:**
+falso positivo aqui abre um PR que o Paulo recusa — aborrecimento de um minuto.
+**Falso negativo faz a ordem sumir sem ninguém perceber.** A lista tem que ser
+generosa.
+
+Pergunta sobre a ideia continua sendo conversa: *"o que você acha de mudar a
+cor?"* não vira PR.
+
+### 4.11.2 O "eita, esqueci" — contar uma vez apagava
+
+`tarefasParaContar` filtra `!contada`. Assim que o aviso saía pela boca **uma
+vez**, a tarefa desaparecia do que o Zeus enxerga. Se o Paulo estava longe da
+tela, ou perguntou depois, o Zeus olhava, não achava nada, e respondia com
+honestidade que não tinha registro — o que soa exatamente como "esqueci".
+
+**Contar uma vez não pode ser o mesmo que apagar.** Agora ele recebe também o
+que terminou nas últimas 12 horas, com horário e resultado, e a regra dura: se
+está na lista, responde pela lista.
+
+### 4.11.3 O esquecimento entre conversas
+
+> *"Você termina a conversa, volta daqui a uns tempinhos, e ele esqueceu
+> totalmente."*
+
+Não era falha de gravação — a conversa **é** gravada em disco e sobrevive a
+restart. Ela **rolava**: 20 falas somem em dez minutos de conversa.
+
+Duas coisas entraram:
+
+1. **A conversa subiu para 60 falas** (trinta idas e vindas). Não é de graça:
+   essas falas viajam no pedaço **sem** desconto de cache.
+2. **O caderno.** O que o Paulo estabelece como regra — *"de agora em diante…"*,
+   *"anota isso…"*, *"nunca mais…"* — sai da conversa e vai para um caderno que
+   **nunca rola**, e volta em toda chamada, semanas depois.
+
+> **O caderno é pequeno de propósito (40 linhas).** Ele viaja em toda chamada,
+> então cada linha é paga para sempre. Caderno que vira diário deixa de ser
+> memória e vira peso: o que importa se perde no meio do que não importa. Por
+> isso a lista que manda anotar é **estreita**, ao contrário da de verbos.
+
+### 4.11.4 A pausa de 4 segundos — a troca que foi desfeita
+
+> *"Ele responde a frase, aí passa uns quatro, cinco segundos para continuar o
+> raciocínio."*
+
+Era a troca registrada na seção 4.5, cobrada. Ele abria com "Sim." — quatro
+letras, meio segundo de áudio — e o pedaço seguinte era grande demais para a
+máquina preparar nesse meio segundo.
+
+`MINIMO_PRIMEIRO` subiu de 8 para 35: **a abertura nunca sai sozinha**, vai
+junto com o começo da explicação. E havia um segundo defeito no fim do texto —
+ali não existe "próxima frase" para esticar, então o toco escapava mesmo com o
+piso alto. Agora, no fim, ele leva tudo o que sobrou de uma vez.
+
+**A lição, para a próxima vez:** começar meio segundo mais cedo não paga um
+buraco de quatro segundos no meio. **Quem ouve não cronometra o começo — quem
+ouve percebe a pausa.**
+
 ## 5. Pendências — em ordem de importância
 
 ### 5.1 🔴 Trocar a chave da Anthropic (do Paulo, urgente)

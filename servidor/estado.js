@@ -131,13 +131,60 @@ export function abrirTarefa(estado, { ordem, repo, tipo = 'trabalho' }) {
   return id
 }
 
-export function fecharTarefa(estado, id, resultado) {
-  estado.tarefas = (estado.tarefas || []).map((t) =>
-    t.id === id
-      ? { ...t, ...resultado, estado: resultado.ok ? 'pronta' : 'falhou', fimEm: new Date().toISOString() }
-      : t
-  )
+export function fecharTarefa(estado, id, resultado, agora = Date.now()) {
+  estado.tarefas = (estado.tarefas || []).map((t) => {
+    if (t.id !== id) return t
+    const levou = Math.max(0, agora - new Date(t.em).getTime())
+    guardarDuracao(estado, t.tipo || 'trabalho', levou)
+    return {
+      ...t,
+      ...resultado,
+      estado: resultado.ok ? 'pronta' : 'falhou',
+      levouMs: levou,
+      fimEm: new Date(agora).toISOString(),
+    }
+  })
   return estado
+}
+
+// ---------------------------------------------------------------------------
+// QUANTO TEMPO ELE COSTUMA LEVAR
+// ---------------------------------------------------------------------------
+//
+// O Paulo pediu: "seria interessante ele saber uma projecao de quanto tempo
+// leva para resolver". E justo — "vou trabalhar nisso" sem prazo nenhum deixa
+// ele sem saber se espera dois minutos ou vai almocar.
+//
+// A projecao NAO e chute: sai do que ele MESMO levou nas ultimas vezes. Sem
+// historico ele nao promete nada, que e melhor que prometer errado — prazo
+// inventado e estourado toda vez destroi a confianca mais rapido que nenhum
+// prazo.
+
+/** Quantas medidas guardar por tipo. O suficiente para a mediana nao pular. */
+const MAX_DURACOES = 10
+
+function guardarDuracao(estado, tipo, ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return estado
+  const todas = { ...(estado.duracoes || {}) }
+  todas[tipo] = [...(todas[tipo] || []), ms].slice(-MAX_DURACOES)
+  estado.duracoes = todas
+  return estado
+}
+
+/**
+ * Quanto ele costuma levar, em minutos, ou null se ainda nao sabe.
+ *
+ * MEDIANA e nao media, de proposito: uma tarefa que estourou o prazo de dez
+ * minutos puxaria a media para cima e faria ele prometer mal para sempre.
+ */
+export function minutosTipicos(estado, tipo = 'trabalho') {
+  const lista = (estado.duracoes?.[tipo] || []).filter((n) => Number.isFinite(n) && n > 0)
+  if (lista.length < 2) return null
+  const ordenada = [...lista].sort((a, b) => a - b)
+  const meio = Math.floor(ordenada.length / 2)
+  const mediana =
+    ordenada.length % 2 ? ordenada[meio] : (ordenada[meio - 1] + ordenada[meio]) / 2
+  return Math.max(1, Math.round(mediana / 60000))
 }
 
 /** O que ele ainda nao conseguiu contar ao Paulo. */

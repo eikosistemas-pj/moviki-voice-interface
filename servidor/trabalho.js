@@ -39,6 +39,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { podeMexer, REPOS_PERMITIDOS } from './maos.js'
+import { espelhar, temEspelho } from './olhos.js'
 import { aplicarTroca, nomearRamo, validar } from './proposta.js'
 
 /** Onde ele LE para trabalhar: o espelho, que e so leitura. */
@@ -75,7 +76,10 @@ const MODELO = process.env.ZEUS_MODELO_TRABALHO || 'claude-opus-5'
 const JANELA_PADRAO = 80
 
 /** Acima disso, ler o arquivo inteiro e desperdicio: ele usa busca. */
-const ARQUIVO_PEQUENO = 24_000
+const ARQUIVO_PEQUENO = Number(process.env.ZEUS_ARQUIVO_PEQUENO || 60_000)
+
+/** Quando o arquivo e grande demais, tantas linhas do comeco vem mesmo assim. */
+const ABERTURA_LINHAS = 120
 
 /** Quantos achados a busca devolve. Mais que isso vira ruido. */
 const MAX_ACHADOS = 40
@@ -217,6 +221,79 @@ errado gera um Pull Request que ele vai ter que ler para descobrir que esta
 errado — e isso gasta o tempo dele, que e o que voce existe para poupar.`
 }
 
+/**
+ * Poe a marca de cache no ULTIMO bloco da conversa.
+ *
+ * A marca e um ponto de corte: tudo ANTES dela e cobrado barato e chega
+ * rapido na proxima volta. Ela anda junto com a conversa, sempre no fim — por
+ * isso e refeita a cada volta em vez de ficar fixa numa mensagem.
+ *
+ * Nao altera `messages`: devolve uma copia. Marcar o array original faria a
+ * marca velha sobrar no meio da conversa na volta seguinte, e duas marcas em
+ * lugares diferentes desperdicam os poucos pontos de corte que existem.
+ */
+function comCache(messages) {
+  if (!messages.length) return messages
+  const copia = messages.slice()
+  const ultima = copia[copia.length - 1]
+  const conteudo = Array.isArray(ultima.content)
+    ? ultima.content.slice()
+    : [{ type: 'text', text: String(ultima.content || '') }]
+  if (!conteudo.length) return messages
+  conteudo[conteudo.length - 1] = {
+    ...conteudo[conteudo.length - 1],
+    cache_control: { type: 'ephemeral' },
+  }
+  copia[copia.length - 1] = { ...ultima, content: conteudo }
+  return copia
+}
+
+/**
+ * O ESPELHO ESTA AQUI? E, SE NAO ESTIVER, TRAZ.
+ *
+ * ---------------------------------------------------------------------------
+ * O DEFEITO MAIS TRAICOEIRO ATE AGORA — 18/09/2026
+ * ---------------------------------------------------------------------------
+ * O Zeus le o codigo de uma copia local dos repositorios. Se essa copia nao
+ * estivesse na maquina, `arquivosDeTexto` percorria uma pasta que nao existe,
+ * voltava com lista vazia, e a busca respondia:
+ *
+ *     "(nao achei esse texto em lugar nenhum)"
+ *
+ * Que e MENTIRA. O certo seria "nao consigo ler, a copia nao esta aqui".
+ *
+ * A diferenca entre as duas frases e enorme: a primeira faz o Zeus concluir
+ * que a newsletter nao existe e desistir; a segunda faz ele avisar que tem
+ * coisa faltando na maquina. Silencio e engano tem o mesmo gosto para quem
+ * esta do outro lado.
+ *
+ * Alem de avisar, ele TENTA RESOLVER: clona na hora. Assistente que sabe se
+ * consertar e melhor que assistente que sabe reclamar.
+ */
+async function garantirEspelho(repo) {
+  // A CERCA VEM ANTES DA CONVENIENCIA.
+  //
+  // Trazer uma copia e uma acao de rede, e ela nao pode servir de porta dos
+  // fundos: se o repositorio nao e um dos quatro em que ele pode encostar, nao
+  // se clona nem se le. Sem esta linha, bastaria pedir uma leitura no robo do
+  // dinheiro para a copia dele aparecer nesta maquina.
+  if (!REPOS_PERMITIDOS.includes(repo)) {
+    return { ok: false, recado: `(o ${repo} nao e meu. Nao leio nem trago copia dele.)` }
+  }
+  if (temEspelho(repo)) return { ok: true }
+  console.warn(`[zeus] o espelho de ${repo} nao esta aqui. Trazendo agora...`)
+  const veio = await espelhar(repo).catch(() => false)
+  if (veio && temEspelho(repo)) return { ok: true, clonadoAgora: true }
+  return {
+    ok: false,
+    recado:
+      `(NAO CONSIGO LER o ${repo}: a copia dele nao esta nesta maquina e eu ` +
+      'nao consegui trazer agora. ISTO NAO QUER DIZER QUE O QUE VOCE PROCURA ' +
+      'NAO EXISTE — quer dizer que eu nao consigo olhar. Diga isso ao Paulo, ' +
+      'com estas palavras, e pare: ele precisa rodar o doutor na VPS.)',
+  }
+}
+
 function dentroDoRepo(repo, relativo) {
   const base = path.resolve(path.join(ESPELHO, repo))
   const alvo = path.resolve(path.join(base, relativo || ''))
@@ -279,6 +356,8 @@ function achatar(texto) {
  */
 export async function buscar(repo, termo) {
   if (!termo || termo.length < 2) return '(me diga um texto maior para procurar)'
+  const espelho = await garantirEspelho(repo)
+  if (!espelho.ok) return espelho.recado
 
   const alvoAchatado = achatar(termo)
   const lista = await arquivosDeTexto(repo)
@@ -319,6 +398,8 @@ export async function buscar(repo, termo) {
 
 /** Le uma janela de linhas. Sem janela, arquivo grande vem cortado. */
 export async function ler(repo, caminho, linha, quantas) {
+  const espelho = await garantirEspelho(repo)
+  if (!espelho.ok) return espelho.recado
   const veredito = podeMexer(repo, caminho)
   if (!veredito.permitido) return `(nao posso ler: ${veredito.motivo})`
 
@@ -338,10 +419,24 @@ export async function ler(repo, caminho, linha, quantas) {
     if (texto.length <= ARQUIVO_PEQUENO) {
       return linhas.map((l, i) => `${i + 1}: ${l}`).join('\n')
     }
+    // ARQUIVO GRANDE SEM LINHA: ANTES ELE NAO RECEBIA NADA — 18/09/2026.
+    //
+    // A versao anterior devolvia so um recado dizendo "grande demais, use
+    // buscar". Do lado dele isso chega como leitura que nao volta: ele pediu
+    // para ler e recebeu uma recusa. E o Paulo ouviu o Zeus dizendo que "a
+    // leitura nao volta".
+    //
+    // Agora o comeco do arquivo vem junto com o recado. O comeco de um HTML
+    // tem o titulo, o cabecalho e a estrutura — quase sempre e o bastante para
+    // ele se localizar e saber o que buscar em seguida. Devolver ALGUMA COISA
+    // util sempre vale mais que devolver um nao.
+    const amostra = linhas.slice(0, ABERTURA_LINHAS)
     return (
       `(este arquivo tem ${linhas.length} linhas e ${texto.length} caracteres — ` +
-      'grande demais para ler inteiro. Use "buscar" para achar a linha e volte ' +
-      'aqui dizendo a linha inicial.)'
+      `grande demais para vir inteiro. Seguem as ${amostra.length} primeiras ` +
+      'linhas para voce se localizar. Para ver outro trecho, use "buscar" e ' +
+      'volte aqui dizendo a linha inicial.)\n' +
+      amostra.map((l, i) => `${i + 1}: ${l}`).join('\n')
     )
   }
 
@@ -354,6 +449,8 @@ export async function ler(repo, caminho, linha, quantas) {
 }
 
 export async function listar(repo, pasta = '') {
+  const espelho = await garantirEspelho(repo)
+  if (!espelho.ok) return espelho.recado
   const alvo = dentroDoRepo(repo, pasta)
   if (!alvo) return '(caminho invalido)'
   try {
@@ -404,6 +501,19 @@ export async function montarProposta({ repo, ordem }) {
     return { ok: false, erros: ['esse repositorio nao e meu'] }
   }
 
+  // Conferir ANTES de gastar a primeira chamada paga: sem o espelho, as 14
+  // voltas seriam 14 chamadas para descobrir que nao da para ler nada.
+  const espelho = await garantirEspelho(repo)
+  if (!espelho.ok) {
+    return {
+      ok: false,
+      erros: [
+        `nao consigo ler o ${repo} aqui na maquina — a copia dele nao esta ` +
+          'presente. Rode o doutor na VPS',
+      ],
+    }
+  }
+
   const comecou = Date.now()
   const messages = [{ role: 'user', content: `Ordem do Paulo: ${ordem}` }]
 
@@ -451,9 +561,22 @@ export async function montarProposta({ repo, ordem }) {
           // Cabe folgado numa troca de trecho. Era 16000 quando ele tentava
           // devolver o arquivo inteiro — e nem assim cabia.
           max_tokens: 8000,
-          system: instrucao(repo),
+          // O DESCONTO DE CACHE, QUE FALTAVA E CUSTAVA TEMPO — 18/09/2026.
+          //
+          // Este laco da ate 14 voltas, e a cada volta ele remandava TUDO de
+          // novo: a instrucao, as ferramentas, e todo o codigo ja lido. Sem
+          // marca de cache, cada volta pagava e ESPERAVA o pedido inteiro
+          // outra vez — e o que ele leu na volta 3 continua no pedido da
+          // volta 12.
+          //
+          // Com a marca, o comeco repetido custa cerca de um decimo e chega
+          // muito mais rapido. Num laco que le arquivo grande, isso e a maior
+          // parte do tempo de espera.
+          system: [
+            { type: 'text', text: instrucao(repo), cache_control: { type: 'ephemeral' } },
+          ],
           tools: FERRAMENTAS,
-          messages,
+          messages: comCache(messages),
           // ESFORCO MAXIMO PRATICO, DE PROPOSITO.
           //
           // Aqui nao se economiza. Ler codigo alheio e montar uma alteracao

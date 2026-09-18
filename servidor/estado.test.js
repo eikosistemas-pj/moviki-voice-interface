@@ -79,3 +79,49 @@ test('sem tarefa nenhuma nao quebra', () => {
   assert.deepEqual(tarefasEmAndamento({}), [])
   assert.deepEqual(enterrarOrfas({}, { limiteMs: 0 }), [])
 })
+
+// ---------------------------------------------------------------------------
+// A PREVISAO DE TEMPO
+// ---------------------------------------------------------------------------
+//
+// "Seria interessante ele saber uma projecao de quanto tempo leva." — Paulo,
+// 18/09/2026. A previsao sai do que ele MESMO levou, nunca de chute.
+
+import { fecharTarefa, minutosTipicos } from './estado.js'
+
+test('sem historico ele nao promete prazo nenhum', () => {
+  // Prazo inventado e estourado toda vez destroi a confianca mais rapido que
+  // nenhum prazo.
+  assert.equal(minutosTipicos({}, 'trabalho'), null)
+  assert.equal(minutosTipicos({ duracoes: { trabalho: [60000] } }, 'trabalho'), null)
+})
+
+test('a previsao sai do que ele levou de verdade', () => {
+  const e = { duracoes: { trabalho: [120000, 180000, 240000] } }
+  assert.equal(minutosTipicos(e, 'trabalho'), 3)
+})
+
+test('uma tarefa que estourou nao estraga a previsao', () => {
+  // MEDIANA e nao media: um estouro de 10 minutos puxaria a media e faria ele
+  // prometer mal para sempre.
+  const e = { duracoes: { trabalho: [120000, 120000, 120000, 600000] } }
+  assert.equal(minutosTipicos(e, 'trabalho'), 2)
+})
+
+test('trabalho e analise tem previsoes separadas', () => {
+  const e = { duracoes: { trabalho: [300000, 300000], analise: [60000, 60000] } }
+  assert.equal(minutosTipicos(e, 'trabalho'), 5)
+  assert.equal(minutosTipicos(e, 'analise'), 1)
+})
+
+test('fechar a tarefa guarda quanto ela levou', () => {
+  const inicio = Date.now()
+  const e = {
+    tarefas: [
+      { id: 't1', tipo: 'trabalho', estado: 'trabalhando', em: new Date(inicio).toISOString() },
+    ],
+  }
+  fecharTarefa(e, 't1', { ok: true, link: 'x' }, inicio + 4 * 60 * 1000)
+  assert.equal(e.tarefas[0].levouMs, 4 * 60 * 1000)
+  assert.deepEqual(e.duracoes.trabalho, [4 * 60 * 1000])
+})

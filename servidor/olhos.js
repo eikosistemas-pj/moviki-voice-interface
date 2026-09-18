@@ -77,7 +77,7 @@ async function git(pasta, args, tempo = 60_000) {
  * arqueologia de dois anos. Historia funda custa disco e tempo numa maquina
  * de 2 GB que ja passou aperto.
  */
-async function espelhar(repo) {
+export async function espelhar(repo) {
   const pasta = path.join(RAIZ, repo)
   if (!fs.existsSync(path.join(pasta, '.git'))) {
     try {
@@ -86,8 +86,12 @@ async function espelhar(repo) {
         ['clone', '--depth', '30', `https://github.com/${DONO}/${repo}`, pasta],
         { timeout: 300_000 }
       )
+      console.log(`[zeus] espelho de ${repo} clonado agora`)
       return true
-    } catch {
+    } catch (e) {
+      // Sem isto o clone falhava EM SILENCIO e o Zeus ficava lendo uma pasta
+      // vazia — concluindo que o codigo nao existia.
+      console.error(`[zeus] NAO consegui clonar ${repo}: ${String(e?.message || e).slice(0, 200)}`)
       return false
     }
   }
@@ -198,6 +202,22 @@ export async function shaDosRepos(repos = REPOS) {
     if (sha && !sha.startsWith('(')) fora[repo] = sha
   }
   return fora
+}
+
+/**
+ * Da para LER este repositorio aqui na maquina?
+ *
+ * A pergunta e "tem arquivo para ler", nao "e um clone do git". Uma pasta com
+ * o codigo dentro serve para buscar e ler, mesmo sem `.git` — e exigir `.git`
+ * faria o Zeus recusar a ler codigo que esta bem ali.
+ */
+export function temEspelho(repo) {
+  const pasta = path.join(RAIZ, repo)
+  try {
+    return fs.existsSync(pasta) && fs.readdirSync(pasta).length > 0
+  } catch {
+    return false
+  }
 }
 
 /** O que ja se sabe, sem ir ao disco. */

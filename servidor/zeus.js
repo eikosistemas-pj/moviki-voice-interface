@@ -42,6 +42,7 @@ import {
   pareceTrabalho,
   repoDoAssunto,
 } from './comando.js'
+import { decidirPromessa } from './promessa.js'
 import { montarSystem, pensarEmFluxo } from './cerebro.js'
 import { partirFala } from '../lib/partirFala.js'
 import * as estado from './estado.js'
@@ -150,6 +151,100 @@ function comPrazo(fala, atual, tipo) {
   const min = estado.minutosTipicos(atual, tipo)
   if (!min) return fala
   return `${fala} Costuma levar uns ${min} ${min === 1 ? 'minuto' : 'minutos'}.`
+}
+
+/**
+ * DISPARA O TRABALHO — e o unico lugar onde uma ordem vira tarefa de verdade.
+ *
+ * Ficou separado da rota porque agora ha DOIS caminhos que chegam aqui: a
+ * ordem reconhecida pela lista de verbos, e a promessa que o proprio Zeus fez
+ * na conversa (ver o guarda-promessa la embaixo). Os dois precisam abrir a
+ * tarefa do mesmo jeito, ser enterrados pelo mesmo prazo e contar o resultado
+ * pela mesma boca — duas copias disso viveriam divergindo em silencio.
+ *
+ * De proposito sem `await`: a resposta sai agora. O `.then` grava o resultado
+ * quando chegar, lendo o estado DE NOVO — entre o inicio e o fim o Paulo pode
+ * ter falado outras coisas, e gravar por cima da copia velha apagaria a
+ * conversa dele.
+ */
+function dispararTrabalho(atual, { ordem, repo }) {
+  const id = estado.abrirTarefa(atual, { ordem, repo })
+  estado.anotar(atual, { o: 'trabalho', resumo: `comecei: ${ordem.slice(0, 100)}` })
+
+  montarProposta({ repo, ordem })
+    .then(async (r) => {
+      // A pergunta viaja junto: e ela que o Zeus vai FALAR, no lugar de um
+      // "nao deu" seco que obrigaria o Paulo a pedir tudo de novo.
+      if (!r.ok) return { ok: false, erros: r.erros, pergunta: r.pergunta }
+      return executarProposta(r.proposta)
+    })
+    .then((r) => {
+      const agora = estado.ler()
+      estado.fecharTarefa(agora, id, r)
+      estado.anotar(agora, {
+        o: 'trabalho',
+        resumo: r.ok ? `abri um Pull Request: ${r.link}` : `nao deu: ${(r.erros || []).join('; ')}`,
+      })
+      estado.gravar(agora)
+    })
+    .catch((e) => {
+      const agora = estado.ler()
+      estado.fecharTarefa(agora, id, { ok: false, erros: [String(e?.message || e)] })
+      estado.gravar(agora)
+    })
+
+  return id
+}
+
+/** O mesmo, para o caminho que so LE o codigo e responde. */
+function dispararAnalise(atual, { ordem, repo }) {
+  const id = estado.abrirTarefa(atual, { ordem, repo, tipo: 'analise' })
+  estado.anotar(atual, { o: 'analise', resumo: `fui olhar: ${ordem.slice(0, 100)}` })
+
+  analisar({ repo, pergunta: ordem })
+    .then((r) => {
+      const agora = estado.ler()
+      estado.fecharTarefa(agora, id, r)
+      estado.anotar(agora, {
+        o: 'analise',
+        resumo: r.ok ? `respondi sobre: ${ordem.slice(0, 80)}` : `nao deu: ${(r.erros || []).join('; ')}`,
+      })
+      estado.gravar(agora)
+    })
+    .catch((e) => {
+      const agora = estado.ler()
+      estado.fecharTarefa(agora, id, { ok: false, erros: [String(e?.message || e)] })
+      estado.gravar(agora)
+    })
+
+  return id
+}
+
+/**
+ * O GUARDA-PROMESSA, do lado de ca: a decisao vem de `promessa.js` e aqui ela
+ * vira tarefa aberta e frase falada.
+ *
+ * Devolve a frase a acrescentar no fim da resposta, ou null para nao dizer
+ * nada alem do que o Zeus ja falou.
+ */
+function cumprirPromessa(atual, { resposta, ordem }) {
+  const d = decidirPromessa({
+    resposta,
+    ordem,
+    temToken: Boolean(process.env.ZEUS_GITHUB_TOKEN),
+  })
+
+  if (d.o === 'vedado') return FALAS.assuntoDoPaulo
+  if (d.o === 'faltou_token') return FALAS.semOficina
+  if (d.o === 'faltou_onde') {
+    return d.tipo === 'analise' ? FALAS.ondeOlhar : FALAS.ondeMexer
+  }
+  if (d.o !== 'disparar') return null
+
+  if (d.tipo === 'analise') dispararAnalise(atual, { ordem, repo: d.repo })
+  else dispararTrabalho(atual, { ordem, repo: d.repo })
+  console.log(`[zeus] guarda-promessa: virou ${d.tipo} no ${d.repo} — ${ordem.slice(0, 80)}`)
+  return null
 }
 
 function responderJSON(res, codigo, corpo) {
@@ -354,35 +449,8 @@ async function tratarFala(req, res) {
       return responderFala(res, 200, FALAS.semOficina, { turno: atual.turno })
     }
 
-    const id = estado.abrirTarefa(atual, { ordem: falado, repo })
-    estado.anotar(atual, { o: 'trabalho', resumo: `comecei: ${falado.slice(0, 100)}` })
+    dispararTrabalho(atual, { ordem: falado, repo })
     estado.gravar(atual)
-
-    // De proposito sem `await`: a resposta sai agora. O `.then` grava o
-    // resultado quando chegar, lendo o estado DE NOVO — entre o inicio e o
-    // fim o Paulo pode ter falado outras coisas, e gravar por cima da copia
-    // velha apagaria a conversa dele.
-    montarProposta({ repo, ordem: falado })
-      .then(async (r) => {
-        // A pergunta viaja junto: e ela que o Zeus vai FALAR, no lugar de um
-        // "nao deu" seco que obrigaria o Paulo a pedir tudo de novo.
-        if (!r.ok) return { ok: false, erros: r.erros, pergunta: r.pergunta }
-        return executarProposta(r.proposta)
-      })
-      .then((r) => {
-        const agora = estado.ler()
-        estado.fecharTarefa(agora, id, r)
-        estado.anotar(agora, {
-          o: 'trabalho',
-          resumo: r.ok ? `abri um Pull Request: ${r.link}` : `nao deu: ${(r.erros || []).join('; ')}`,
-        })
-        estado.gravar(agora)
-      })
-      .catch((e) => {
-        const agora = estado.ler()
-        estado.fecharTarefa(agora, id, { ok: false, erros: [String(e?.message || e)] })
-        estado.gravar(agora)
-      })
 
     return responderFala(res, 200, comPrazo(FALAS.vouTrabalhar, atual, 'trabalho'), {
       turno: atual.turno,
@@ -466,33 +534,14 @@ async function tratarFala(req, res) {
       // frase resolve, e nao deixa duvida sobre o que aconteceu.
       return responderFala(res, 200, FALAS.ondeOlhar, { turno: atual.turno })
     }
-    if (repo) {
-      const id = estado.abrirTarefa(atual, { ordem: falado, repo, tipo: 'analise' })
-      estado.anotar(atual, { o: 'analise', resumo: `fui olhar: ${falado.slice(0, 100)}` })
-      estado.gravar(atual)
+    // Sem `await` la dentro: a resposta sai agora. Ler codigo leva dezenas de
+    // segundos e ele esta na frente da tela esperando uma voz.
+    dispararAnalise(atual, { ordem: falado, repo })
+    estado.gravar(atual)
 
-      // Sem `await`: a resposta sai agora. Ler codigo leva dezenas de segundos
-      // e ele esta na frente da tela esperando uma voz.
-      analisar({ repo, pergunta: falado })
-        .then((r) => {
-          const agora = estado.ler()
-          estado.fecharTarefa(agora, id, r)
-          estado.anotar(agora, {
-            o: 'analise',
-            resumo: r.ok ? `respondi sobre: ${falado.slice(0, 80)}` : `nao deu: ${(r.erros || []).join('; ')}`,
-          })
-          estado.gravar(agora)
-        })
-        .catch((e) => {
-          const agora = estado.ler()
-          estado.fecharTarefa(agora, id, { ok: false, erros: [String(e?.message || e)] })
-          estado.gravar(agora)
-        })
-
-      return responderFala(res, 200, comPrazo(FALAS.vouOlhar, atual, 'analise'), {
-        turno: atual.turno,
-      })
-    }
+    return responderFala(res, 200, comPrazo(FALAS.vouOlhar, atual, 'analise'), {
+      turno: atual.turno,
+    })
   }
 
   // --- Conversa: a unica rota que pensa, e a unica que corre em fluxo ------
@@ -528,6 +577,27 @@ async function tratarFala(req, res) {
     canal.fala(FALAS.semCerebro)
     return canal.fim({ turno: atual.turno })
   }
+
+  // --- O GUARDA-PROMESSA: se ele prometeu, a promessa vira tarefa ----------
+  //
+  // O Paulo, hoje, pela terceira vez: *"ele aceita, diz que vai fazer, e daqui
+  // a dois minutos nao tem nada feito"*. E o proprio Zeus, para ele: *"o
+  // disparo nao esta pegando"*.
+  //
+  // Ate aqui, quem decidia se uma frase era ordem era UMA LISTA DE VERBOS. Ela
+  // acabou de ser alargada, mas continua sendo uma aposta sobre o vocabulario
+  // de outra pessoa — e a aposta perde no dia em que ele disser "da um jeito
+  // naquele rodape".
+  //
+  // Agora existe uma rede embaixo, e ela nao depende de eu adivinhar palavra
+  // nenhuma: o Zeus acabou de LER a frase inteira e responder. Se a resposta
+  // dele foi uma promessa, a promessa vira tarefa aqui, neste segundo.
+  //
+  // O disparo acontece com o fluxo AINDA ABERTO, entao a frase que falta —
+  // "em qual parte do Moviki?" quando nao da para saber onde mexer — sai junto,
+  // na mesma resposta, em vez de a promessa evaporar em silencio.
+  const falta = cumprirPromessa(atual, { resposta: r.texto, ordem: falado })
+  if (falta) canal.fala(falta)
 
   estado.contarChamada(atual)
   // Marcadas so DEPOIS de a resposta existir: se a chamada falhasse antes,

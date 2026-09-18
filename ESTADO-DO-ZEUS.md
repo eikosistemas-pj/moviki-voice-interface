@@ -4,6 +4,10 @@
 Quando uma conversa acaba, a memória dela acaba junto. Este arquivo é a memória que fica.
 **Quem abrir um chat novo lê isto primeiro e sabe exatamente onde paramos.**
 
+> **Vai construir o CRM dos agentes?** Comece por
+> [`ESTADO-DO-CRM.md`](./ESTADO-DO-CRM.md), e volte para cá depois: as decisões
+> deste arquivo valem lá também.
+
 Mesma regra do `CLAUDE.md` dos outros repositórios: *o repositório é a única fonte da verdade*.
 
 ---
@@ -329,6 +333,22 @@ bash servidor/token.sh --modelo-rapido
 > **Regra que fica:** configuração que mora na VPS pode anular decisão que mora
 > no código, e anula **em silêncio**. Quando o comportamento não bater com o
 > que o código diz, olhar o `zeus.env` antes de procurar bug.
+
+## 4.10 ➡️ O PRÓXIMO PROJETO: o CRM dos agentes
+
+No fim de 18/09/2026 o Paulo pediu um CRM para gerir todos os agentes, com a
+porta numa **aba no painel do dono**, e pediu de propósito que a construção
+começasse **num chat novo** — este já estava pesado.
+
+**Está tudo preparado em [`ESTADO-DO-CRM.md`](./ESTADO-DO-CRM.md)**, neste mesmo
+repositório: o que ele pediu nas palavras dele, onde o CRM mora e por quê, as
+duas metades (posto de comando dos agentes + funil de lojistas), como o painel
+vai enxergar o Zeus, a ordem de construção, e as três perguntas que continuam
+sendo dele.
+
+> **O CRM se constrói no `moviki-app`, não aqui.** O que este repositório
+> precisa entregar é uma rota de leitura (`/api/zeus/painel`) com o estado do
+> Zeus — e ele já tem tudo que ela precisa em `servidor/estado.js`.
 
 ## 5. Pendências — em ordem de importância
 

@@ -39,7 +39,7 @@ const MAX_TOKENS = 600
  * Escrito para ser FALADO. Todo o resto do Moviki e texto na tela; aqui a
  * saida vira audio, e audio nao tem negrito, nem lista, nem link para clicar.
  */
-export function montarPrompt({ turnoAberto }) {
+export function montarPersona() {
   return `Voce e o ZEUS, assistente de comando do Paulo, dono do MOVIKI.
 
 O MOVIKI e um SaaS para negocios itinerantes (food truck, feira, loja movel):
@@ -91,7 +91,55 @@ ele perguntar algo que depende de olhar o codigo ou um Pull Request agora,
 diga com todas as letras que ainda nao esta ligado nisso, em vez de chutar um
 numero ou um status.
 
-TURNO AGORA: ${turnoAberto ? 'ABERTO — o Paulo saiu e passou o posto para voce. Voce pode decidir dentro da cerca acima, e vai prestar contas quando ele chegar.' : 'FECHADO — o Paulo esta aqui. Voce executa o que ele mandar e nao decide nada no lugar dele.'}`
+VOCE TEM OLHOS, MAS NAO ADIVINHA. A cada conversa voce recebe o mapa oficial
+do projeto e o estado real dos repositorios, lido do codigo. Use como fato. O
+que nao estiver ali voce NAO sabe — e "nao estou ligado nisso" e melhor
+resposta que um numero inventado. Chute com voz de comando vira decisao
+errada do Paulo.`
+}
+
+/**
+ * O pedaco que MUDA a cada conversa: o turno e o retrato de agora.
+ *
+ * Separado da persona de proposito. A Anthropic cobra um decimo pelo texto
+ * repetido que ela ja viu, mas so enquanto o comeco do prompt nao muda nem um
+ * byte. Persona e mapa sao iguais sempre e vao no pedaco barato; o retrato
+ * muda de quinze em quinze minutos e fica de fora. Misturar os dois faria o
+ * mapa inteiro ser cobrado cheio a cada frase — e o mapa e grande.
+ */
+export function montarMomento({ turnoAberto, retrato }) {
+  const turno = turnoAberto
+    ? 'ABERTO — o Paulo saiu e passou o posto para voce. Pode decidir dentro da cerca, e vai prestar contas quando ele chegar.'
+    : 'FECHADO — o Paulo esta aqui. Voce executa o que ele mandar e nao decide nada no lugar dele.'
+
+  return [
+    `TURNO AGORA: ${turno}`,
+    '',
+    retrato || '(ainda nao olhei os repositorios; nao afirme nada sobre o estado do codigo)',
+  ].join('\n')
+}
+
+/**
+ * Monta o `system` em blocos. O primeiro (persona + mapa) leva a marca de
+ * cache: tudo ate ela e cobrado barato a partir da segunda vez.
+ */
+export function montarSystem({ turnoAberto, mapa, retrato }) {
+  const fixo = [montarPersona()]
+  if (mapa) {
+    fixo.push(
+      '',
+      'A SEGUIR, O MAPA MESTRE DO MOVIKI — a memoria oficial do projeto, lida',
+      'do repositorio. E a fonte da verdade sobre como a empresa funciona, o',
+      'que cada parte faz e o que nunca pode ser quebrado.',
+      '',
+      mapa
+    )
+  }
+
+  return [
+    { type: 'text', text: fixo.join('\n'), cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: montarMomento({ turnoAberto, retrato }) },
+  ]
 }
 
 /**
@@ -101,7 +149,7 @@ TURNO AGORA: ${turnoAberto ? 'ABERTO — o Paulo saiu e passou o posto para voce
  * Devolve a resposta em texto, ou null se algo falhou (nunca lanca: o Zeus
  * precisa conseguir dizer que deu errado).
  */
-export async function pensar({ systemPrompt, historico, falaNova }) {
+export async function pensar({ system, historico, falaNova }) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     console.error('[zeus] ANTHROPIC_API_KEY ausente na VPS.')
@@ -137,7 +185,7 @@ export async function pensar({ systemPrompt, historico, falaNova }) {
       body: JSON.stringify({
         model: modelo,
         max_tokens: MAX_TOKENS,
-        system: systemPrompt,
+        system,
         messages,
         // Voz: resposta rapida vale mais que raciocinio longo.
         output_config: { effort: 'low' },
@@ -152,6 +200,15 @@ export async function pensar({ systemPrompt, historico, falaNova }) {
     }
 
     const dados = await resp.json()
+
+    // Sem isto ninguem percebe que o cache parou de valer — e a conta dobra
+    // em silencio. Um byte mudado no comeco do prompt basta para isso.
+    const u = dados.usage || {}
+    console.log(
+      `[zeus] tokens: ${u.input_tokens || 0} novos, ` +
+        `${u.cache_read_input_tokens || 0} do cache, ` +
+        `${u.output_tokens || 0} de resposta`
+    )
     const bloco = Array.isArray(dados.content)
       ? dados.content.find((b) => b.type === 'text')
       : null

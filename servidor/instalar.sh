@@ -63,17 +63,42 @@ if [ -z "${CHAVE:-}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 2. O token da porta
+# 2. A SENHA da porta
 # ---------------------------------------------------------------------------
-# Nao e seguranca: ele viaja para o navegador e quem abrir o codigo da pagina
-# le. Serve para o endereco nao ficar aberto de brincadeira. Quem segura o
-# prejuizo e o teto diario.
-TOKEN=""
+# Esta e a tranca de verdade. Ela mora so aqui e NUNCA vai para a tela — ao
+# contrario do ZEUS_TOKEN antigo, que viajava para dentro da pagina e quem
+# abrisse o codigo dela lia.
+#
+# Importa porque o Zeus agora tem olhos: ele le o mapa mestre e o estado dos
+# repositorios. Sem senha ele atende de olhos fechados, e o servidor grita
+# sobre isso ao subir.
+SENHA=""
 if [ -f "$ENV_ARQ" ]; then
-  TOKEN="$(grep -E '^ZEUS_TOKEN=' "$ENV_ARQ" | cut -d= -f2- || true)"
+  SENHA="$(grep -E '^ZEUS_SENHA=' "$ENV_ARQ" | cut -d= -f2- || true)"
 fi
-if [ -z "$TOKEN" ]; then
-  TOKEN="$(head -c 24 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9')"
+
+if [ -n "$SENHA" ]; then
+  echo "Ja existe uma senha do Zeus."
+  read -r -p "Trocar por outra? (s/N) " TROCAR_SENHA
+  if [[ "${TROCAR_SENHA,,}" == "s" ]]; then SENHA=""; fi
+fi
+
+if [ -z "$SENHA" ]; then
+  echo
+  echo "Crie uma SENHA para falar com o Zeus (nao aparece na tela):"
+  read -r -s SENHA
+  echo
+  echo "Repita:"
+  read -r -s SENHA2
+  echo
+  if [ "$SENHA" != "$SENHA2" ]; then
+    echo "As duas nao batem. Abortado." >&2
+    exit 1
+  fi
+  if [ ${#SENHA} -lt 6 ]; then
+    echo "Muito curta. Use pelo menos 6 caracteres. Abortado." >&2
+    exit 1
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -84,7 +109,13 @@ umask 077
 cat > "$ENV_ARQ" <<FIM
 # Segredos do cerebro do Zeus. NUNCA vai para o git.
 ANTHROPIC_API_KEY=$CHAVE
-ZEUS_TOKEN=$TOKEN
+
+# A tranca. Mora so aqui; a tela nunca ve.
+ZEUS_SENHA=$SENHA
+
+# Olhos: le o mapa mestre e o estado dos repositorios. So abrem com a senha
+# acima configurada — sem ela o servidor atende de olhos fechados.
+ZEUS_OLHOS=1
 
 # Teto de falas por dia. Porta na internet nao tem fundo: se o endereco
 # vazar, a conta para aqui em vez de crescer a noite inteira.
@@ -148,10 +179,11 @@ echo "[ok] servico zeus-cerebro de pe"
 # ---------------------------------------------------------------------------
 # 5. A tela
 # ---------------------------------------------------------------------------
+# A tela nao guarda segredo nenhum: ela pede a senha ao Paulo e recebe um
+# cracha do servidor. Por isso aqui so ficam enderecos.
 cat > "$RAIZ/.env.local" <<FIM
 VITE_ZEUS_TTS_ENDPOINT=/api/voz
 VITE_ZEUS_ENDPOINT=/api/zeus
-VITE_ZEUS_TOKEN=$TOKEN
 FIM
 chown "$DONO" "$RAIZ/.env.local"
 echo "[ok] .env.local escrito (fora do git)"
@@ -193,7 +225,7 @@ puro o navegador bloqueia, e isso e regra do navegador, nao defeito.
 
 === Comandos que voce vai usar ===
 
-  sudo systemctl restart zeus-cerebro     reiniciar
+  sudo systemctl restart zeus-cerebro     reiniciar (derruba os crachas)
   journalctl -u zeus-cerebro -f           ver o que ele esta fazendo
   sudo bash servidor/instalar.sh          rodar de novo (trocar chave, etc.)
 

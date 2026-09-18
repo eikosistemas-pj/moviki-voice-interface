@@ -240,7 +240,17 @@ ordem, e nenhum deles é trava de segurança:
    Request e sem mexer em nada**. Não existe ferramenta de escrever nesse
    caminho. Prazo de 5 minutos — análise que demora não serve para quem está
    esperando falando.
-2. ✅ **Ele já acha problema sozinho** — `servidor/patrulha.js`. De 45 em 45
+2. ✅ **Ele já enxerga PARA FORA** — `servidor/busca.js`. Preço de concorrente,
+   regra que mudou numa plataforma, notícia: ele **pesquisa na internet** e
+   responde dizendo **de onde veio**. A busca roda do lado da Anthropic — a VPS
+   não baixa página, não guarda nada e não ganha porta nova para fora.
+
+   Teto de 5 buscas por pergunta, porque cada uma é paga. E a instrução manda
+   dizer que **não achou** quando não achar, em vez de preencher com o que ele
+   aprendeu no treino: isso tem data de validade e ele não sabe qual parte está
+   velha.
+
+3. ✅ **Ele já acha problema sozinho** — `servidor/patrulha.js`. De 45 em 45
    minutos ele **lê o código** procurando coisa quebrada, texto que engana o
    lojista, e trabalho deixado pela metade. Achando algo que exige decisão do
    Paulo, ele **chama por voz sem ninguém pedir**.
@@ -253,10 +263,10 @@ ordem, e nenhum deles é trava de segurança:
    fala uma vez, e há descanso de 10 minutos entre avisos.
 
    Desligar: `ZEUS_PATRULHA=0` no `zeus.env`.
-3. 🟡 **Ele não conversa sobre o trabalho enquanto trabalha.** É tudo ou nada:
+4. 🟡 **Ele não conversa sobre o trabalho enquanto trabalha.** É tudo ou nada:
    ou abre o PR, ou falha. Não dá para ele dizer "achei três lugares, qual
    deles?" no meio.
-4. 🟡 **Ele não sabe se o que ele escreveu funciona.** Não roda teste nem build
+5. 🟡 **Ele não sabe se o que ele escreveu funciona.** Não roda teste nem build
    — propõe e torce. Rodar comando é a fronteira que exige decisão do Paulo.
 
 **Esforço do modelo de trabalho subiu para `xhigh`** (era o padrão). Ler código
@@ -331,7 +341,22 @@ Em `console.anthropic.com`. **A ordem importa, senão o atendente do WhatsApp em
 2. Cria a chave nova do `moviki-ai` → põe nas Environment Variables do Vercel → publica
 3. **Só depois** apaga a chave velha
 
-### 5.2 🔴 HTTPS — **o script está pronto, falta o Paulo criar o subdomínio**
+### 5.2 ✅ HTTPS — **no ar em `zeus.moviki.com.br`**
+
+Confirmado em 18/09/2026: o Paulo falou com o Zeus **pelo celular**, o que só
+funciona com cadeado. O microfone no celular era refém disso — e a senha dele
+parou de atravessar a internet aberta.
+
+> **O que não pode ser perdido numa reconfiguração do Nginx:**
+> - o bloco de `/api/zeus` tem **`proxy_buffering off`**. Sem isso o Nginx
+>   segura o fluxo de frases e entrega tudo junto no fim, desfazendo em silêncio
+>   todo o conserto da demora;
+> - a tela é servida **direto de `dist/`**, não pelo Vite: não há porta para
+>   adivinhar e ela não depende do PM2 estar de pé.
+
+Para refazer (ou apontar outro endereço): `bash servidor/https.sh <endereco>`.
+
+#### Como foi — para não repetir os erros
 
 Isto deixou de ser teoria em 18/09/2026: **o Paulo abriu no celular e o microfone
 não funcionou.** Não é defeito do Zeus nem do aparelho — navegador nenhum
@@ -366,8 +391,6 @@ certificado e liga a renovação automática.
 
 Enquanto não sobe: a tela agora **explica** que o microfone está bloqueado por
 falta de endereço seguro, em vez de deixar um botão morto sem dizer nada.
-
-</details>
 
 ### 5.3 🟡 Conferir a voz de quem abre o turno
 

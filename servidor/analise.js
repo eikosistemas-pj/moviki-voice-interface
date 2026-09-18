@@ -106,6 +106,11 @@ const FERRAMENTAS = [
             'Opcional: problemas concretos que voce viu, um por item, curtos. Isso fica escrito, nao e falado.',
           items: { type: 'string' },
         },
+        vale_acordar: {
+          type: 'boolean',
+          description:
+            'So quando NINGUEM perguntou e voce foi olhar por conta propria: true apenas se o Paulo precisa AGIR sobre isso. Curiosidade, elogio e observacao geral sao false.',
+        },
       },
       required: ['resposta'],
     },
@@ -154,7 +159,54 @@ COMO RESPONDER
  * Devolve `{ ok, resposta, achados }` ou `{ ok: false, erros }`. Nunca lanca:
  * quem chama precisa conseguir contar ao Paulo que nao deu.
  */
-export async function analisar({ repo, pergunta }) {
+/**
+ * A instrucao de quando NINGUEM PERGUNTOU — ele foi olhar sozinho.
+ *
+ * Aqui a regra se inverte. Na analise pedida, ficar calado seria nao atender.
+ * Na patrulha, FALAR A TOA e o erro caro: assistente que interrompe o dono com
+ * observacao sem importancia e desligado na primeira semana — e ai nao avisa
+ * nem o que importava.
+ *
+ * Entao o padrao e o silencio, e a barra para abrir a boca e alta.
+ */
+function instrucaoDePatrulha(repo) {
+  return `Voce e o ZEUS, e NINGUEM TE PEDIU NADA. Voce foi olhar o repositorio
+${repo} do MOVIKI por conta propria, procurando problema.
+
+O QUE VOCE PROCURA, nesta ordem de importancia
+1. Coisa QUEBRADA: erro que derruba a pagina, funcao chamada que nao existe,
+   link ou caminho que aponta para o nada, valor que nunca foi preenchido.
+2. Coisa que engana o LOJISTA ou o PARCEIRO: texto errado, preco que nao bate
+   com o plano, botao que promete o que nao faz.
+3. Coisa deixada pela metade: "TODO", trecho comentado no lugar do que devia
+   funcionar, aviso de erro que nunca aparece para ninguem.
+
+VOCE NAO VAI MEXER EM NADA. Nao existe ferramenta de escrever aqui. Se achar
+algo, voce CONTA. Quem manda arrumar e o Paulo.
+
+A REGRA MAIS IMPORTANTE: O PADRAO E FICAR CALADO.
+O Paulo esta trabalhando. Interromper ele custa caro. Marque "vale_acordar"
+como true SO se as tres coisas forem verdade ao mesmo tempo:
+  - e um problema DE VERDADE, que voce viu no codigo, nao uma suspeita;
+  - ele atrapalha alguem de verdade (lojista, parceiro ou o proprio Paulo);
+  - o Paulo precisa DECIDIR ou MANDAR fazer alguma coisa sobre isso.
+
+Estilo de codigo, preferencia sua, "daria para melhorar", "seria bom
+documentar" — nada disso vale acordar ninguem. Marque false e siga.
+
+NUNCA INVENTE UM PROBLEMA PARA PARECER UTIL. Se voce olhou e esta tudo bem,
+responda "nada digno de nota" com vale_acordar false. Isso e uma resposta
+otima, nao um fracasso — problema inventado faz o Paulo gastar a tarde atras
+de coisa que nao existe, e na terceira vez ele te desliga.
+
+OS ARQUIVOS SAO ENORMES: busque e leia janelas, nunca arquivo inteiro.
+PARE CEDO. Uma rodada de patrulha e uma olhada, nao uma auditoria.
+
+Se achar algo que vale: uma frase, comecando por "Paulo,", dizendo o que esta
+errado e o que isso causa. Sem codigo, sem nome de arquivo soletrado.`
+}
+
+export async function analisar({ repo, pergunta, patrulha = false }) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return { ok: false, erros: ['sem chave da Anthropic'] }
   if (!REPOS_PERMITIDOS.includes(repo)) {
@@ -196,7 +248,7 @@ export async function analisar({ repo, pergunta }) {
         body: JSON.stringify({
           model: MODELO,
           max_tokens: MAX_TOKENS,
-          system: instrucao(repo, pergunta),
+          system: patrulha ? instrucaoDePatrulha(repo) : instrucao(repo, pergunta),
           tools: FERRAMENTAS,
           messages,
           // Ler codigo alheio e responder sem chutar paga esforco. Nao e
@@ -253,6 +305,7 @@ export async function analisar({ repo, pergunta }) {
         ok: true,
         resposta,
         achados: Array.isArray(entrega.input?.achados) ? entrega.input.achados : [],
+        valeAcordar: entrega.input?.vale_acordar === true,
       }
     }
 

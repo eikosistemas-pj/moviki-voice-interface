@@ -223,7 +223,12 @@ esperando um aviso que não vem, ele não pode nada.
 > **Publicar já desentope o que está travado agora:** ao subir, o servidor
 > enterra as tarefas zumbis e o Zeus conta o que houve na primeira conversa.
 
-### 4.7 Capacidade: o que ainda falta para ele ser útil de verdade
+### 4.7 Capacidade: o caminho para ele ser autônomo
+
+> **A regra de crescimento, dada pelo Paulo em 18/09/2026:** *"aos poucos,
+> quando a gente for vendo que ele está mais inteligente, a gente vai soltando
+> as responsabilidades para ele."* Capacidade primeiro, autoridade depois — e a
+> autoridade se solta por decisão dele, escrita, nunca por iniciativa minha.
 
 O Paulo foi direto: *"eu quero um robô que pense sozinho, ache problemas e
 resolva, para eu poder descansar."* O que separa o Zeus de hoje disso — em
@@ -235,8 +240,19 @@ ordem, e nenhum deles é trava de segurança:
    Request e sem mexer em nada**. Não existe ferramenta de escrever nesse
    caminho. Prazo de 5 minutos — análise que demora não serve para quem está
    esperando falando.
-2. 🟡 **Ele não acha problema sozinho.** A ronda só olha máquina, voz e PR
-   parado. Não lê código atrás de coisa quebrada.
+2. ✅ **Ele já acha problema sozinho** — `servidor/patrulha.js`. De 45 em 45
+   minutos ele **lê o código** procurando coisa quebrada, texto que engana o
+   lojista, e trabalho deixado pela metade. Achando algo que exige decisão do
+   Paulo, ele **chama por voz sem ninguém pedir**.
+
+   **É o primeiro pedaço do Zeus que gasta dinheiro sem ninguém ter pedido**, e
+   por isso tem quatro freios: só olha repositório que MUDOU (guarda o commit
+   que já viu), um de cada vez em rodízio, teto próprio de 12 por dia, e **o
+   padrão é o silêncio** — estilo de código e "daria para melhorar" não valem
+   interromper. Depois disso ainda passa pelas regras do vigia: cada assunto
+   fala uma vez, e há descanso de 10 minutos entre avisos.
+
+   Desligar: `ZEUS_PATRULHA=0` no `zeus.env`.
 3. 🟡 **Ele não conversa sobre o trabalho enquanto trabalha.** É tudo ou nada:
    ou abre o PR, ou falha. Não dá para ele dizer "achei três lugares, qual
    deles?" no meio.

@@ -179,6 +179,27 @@ export async function olhar({ forcar = false } = {}) {
   return cache
 }
 
+/**
+ * O commit de agora de cada espelho.
+ *
+ * A patrulha usa isto para nao reler codigo que nao mudou: repositorio parado
+ * nao ganha rodada, porque reler o mesmo codigo intacto de hora em hora e
+ * queimar dinheiro para chegar sempre na mesma conclusao.
+ *
+ * Le do disco, nao da rede: o espelho ja e atualizado de quinze em quinze
+ * minutos por `manterOlhosAbertos`.
+ */
+export async function shaDosRepos(repos = REPOS) {
+  const fora = {}
+  for (const repo of repos) {
+    const pasta = path.join(RAIZ, repo)
+    if (!fs.existsSync(path.join(pasta, '.git'))) continue
+    const sha = await git(pasta, ['rev-parse', 'HEAD'], 15_000)
+    if (sha && !sha.startsWith('(')) fora[repo] = sha
+  }
+  return fora
+}
+
 /** O que ja se sabe, sem ir ao disco. */
 export function ultimoRetrato() {
   return cache

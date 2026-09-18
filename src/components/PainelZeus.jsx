@@ -33,20 +33,14 @@ const OLHAR = {
   [HUMORES.FIRMEZA]: { cor: '#0891b2', pulso: '2.1s', brilho: 1 },
 }
 
-/** Curvatura do canto da boca, em px. Maximo 3: o Zeus nao ri. */
-const CURVA = {
-  [HUMORES.NEUTRO]: 0,
-  [HUMORES.FELIZ]: 2,
-  [HUMORES.ENTUSIASMO]: 3,
-  [HUMORES.IMPACIENCIA]: 0,
-  [HUMORES.FIRMEZA]: -2,
-}
-
 /**
  * Agitacao das ondas da boca por humor.
  *
  * Multiplica a amplitude real do audio — nao cria movimento do nada. Fora
  * da faixa 0.8-1.2 a fala deixaria de parecer sincronizada com o som.
+ *
+ * O humor NAO deforma a boca: os labios da imagem sao fixos, e um arco
+ * sobreposto criaria uma segunda boca. Expressao vem dos olhos e daqui.
  */
 const AGITACAO = {
   [HUMORES.NEUTRO]: 1,
@@ -62,27 +56,33 @@ function Olho({ posicao, olhar, tamanho }) {
       className="absolute -translate-x-1/2 -translate-y-1/2"
       style={{ left: `${posicao.x}%`, top: `${posicao.y}%` }}
     >
-      {/* Halo externo: presenca do olhar, sem endurecer a borda. */}
+      {/*
+        Halo externo: da presenca ao olhar sem endurecer a borda.
+        `screen` soma luz em vez de pintar por cima — os olhos da imagem
+        ja brilham, e cobri-los apagaria o desenho da pupila.
+      */}
       <div
         className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse rounded-full blur-md"
         style={{
-          width: `${tamanho * 3.2}vw`,
-          height: `${tamanho * 3.2}vw`,
+          width: `${tamanho * 3.6}vw`,
+          height: `${tamanho * 3.6}vw`,
           backgroundColor: olhar.cor,
-          opacity: olhar.brilho * 0.42,
+          opacity: olhar.brilho * 0.38,
           animationDuration: olhar.pulso,
+          mixBlendMode: 'screen',
         }}
       />
-      {/* Nucleo: o brilho do olho propriamente dito. */}
+      {/* Nucleo: reforca a pupila que ja existe na imagem. */}
       <div
         className="relative animate-pulse rounded-full"
         style={{
           width: `${tamanho}vw`,
           height: `${tamanho}vw`,
           backgroundColor: olhar.cor,
-          opacity: olhar.brilho,
-          boxShadow: `0 0 ${tamanho * 10}px ${olhar.cor}`,
+          opacity: olhar.brilho * 0.8,
+          boxShadow: `0 0 ${tamanho * 14}px ${olhar.cor}`,
           animationDuration: olhar.pulso,
+          mixBlendMode: 'screen',
           transition: 'background-color 500ms ease, opacity 500ms ease',
         }}
       />
@@ -94,7 +94,6 @@ export default function PainelZeus({ estado, humor, nivelRef, calibrar }) {
   const [imagemFalhou, setImagemFalhou] = useState(false)
 
   const olhar = OLHAR[humor] || OLHAR[HUMORES.NEUTRO]
-  const curva = CURVA[humor] ?? 0
   const agitacao = AGITACAO[humor] ?? 1
 
   return (
@@ -147,31 +146,13 @@ export default function PainelZeus({ estado, humor, nivelRef, calibrar }) {
               />
             </div>
 
-            {/* Curvatura sutil do canto da boca: o unico "sorriso". */}
-            <svg
-              className="absolute -translate-x-1/2 -translate-y-1/2 overflow-visible"
-              style={{
-                left: `${BOCA.x}%`,
-                top: `${BOCA.y + BOCA.altura * 0.95}%`,
-                width: `${BOCA.largura}%`,
-                height: `${BOCA.altura * 0.6}%`,
-              }}
-              viewBox="0 0 100 12"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <path
-                d={`M12 ${6 - curva} Q50 ${6 + curva * 2.2} 88 ${6 - curva}`}
-                stroke={olhar.cor}
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                fill="none"
-                style={{
-                  opacity: curva === 0 ? 0 : 0.7,
-                  transition: 'all 420ms ease',
-                }}
-              />
-            </svg>
+            {/*
+              A curvatura de canto de boca foi removida de proposito: os
+              labios da imagem sao uma linha fina e definida, e um arco
+              sobreposto criaria uma "segunda boca" visivel. O humor
+              aparece pela cor e ritmo dos olhos e pela agitacao das
+              ondas — que e mais sobrio, e o que o escopo pede.
+            */}
           </>
         )}
 

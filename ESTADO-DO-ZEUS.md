@@ -223,7 +223,12 @@ esperando um aviso que não vem, ele não pode nada.
 > **Publicar já desentope o que está travado agora:** ao subir, o servidor
 > enterra as tarefas zumbis e o Zeus conta o que houve na primeira conversa.
 
-### 4.7 Capacidade: o que ainda falta para ele ser útil de verdade
+### 4.7 Capacidade: o caminho para ele ser autônomo
+
+> **A regra de crescimento, dada pelo Paulo em 18/09/2026:** *"aos poucos,
+> quando a gente for vendo que ele está mais inteligente, a gente vai soltando
+> as responsabilidades para ele."* Capacidade primeiro, autoridade depois — e a
+> autoridade se solta por decisão dele, escrita, nunca por iniciativa minha.
 
 O Paulo foi direto: *"eu quero um robô que pense sozinho, ache problemas e
 resolva, para eu poder descansar."* O que separa o Zeus de hoje disso — em
@@ -235,8 +240,19 @@ ordem, e nenhum deles é trava de segurança:
    Request e sem mexer em nada**. Não existe ferramenta de escrever nesse
    caminho. Prazo de 5 minutos — análise que demora não serve para quem está
    esperando falando.
-2. 🟡 **Ele não acha problema sozinho.** A ronda só olha máquina, voz e PR
-   parado. Não lê código atrás de coisa quebrada.
+2. ✅ **Ele já acha problema sozinho** — `servidor/patrulha.js`. De 45 em 45
+   minutos ele **lê o código** procurando coisa quebrada, texto que engana o
+   lojista, e trabalho deixado pela metade. Achando algo que exige decisão do
+   Paulo, ele **chama por voz sem ninguém pedir**.
+
+   **É o primeiro pedaço do Zeus que gasta dinheiro sem ninguém ter pedido**, e
+   por isso tem quatro freios: só olha repositório que MUDOU (guarda o commit
+   que já viu), um de cada vez em rodízio, teto próprio de 12 por dia, e **o
+   padrão é o silêncio** — estilo de código e "daria para melhorar" não valem
+   interromper. Depois disso ainda passa pelas regras do vigia: cada assunto
+   fala uma vez, e há descanso de 10 minutos entre avisos.
+
+   Desligar: `ZEUS_PATRULHA=0` no `zeus.env`.
 3. 🟡 **Ele não conversa sobre o trabalho enquanto trabalha.** É tudo ou nada:
    ou abre o PR, ou falha. Não dá para ele dizer "achei três lugares, qual
    deles?" no meio.
@@ -258,6 +274,51 @@ Em ordem de quanto rende, se depois de publicar ainda incomodar:
    uma linha na instrução, custa detalhe.
 3. **Tirar a voz da VPS** para um serviço de fala hospedado. Resolve de vez,
    mas traz dependência nova e conta nova.
+
+### 4.8 🔴 O token do GitHub sumiu — e a causa era o próprio instalador
+
+18/09/2026, fim do dia. O Zeus respondeu que **não tinha o token do GitHub** —
+um token que já tinha sido posto.
+
+**A causa raiz:** o `instalar.sh` **reescrevia o arquivo de segredos inteiro,
+do zero, toda vez.** Para trocar uma linha era preciso responder todas as
+perguntas de novo sem errar nenhuma. Basta uma rodada passar pela pergunta do
+token com um Enter e ele é gravado **vazio por cima do que existia**.
+
+Não é só o token: a mesma armadilha apagaria a senha ou a chave da Anthropic.
+
+#### O que foi feito
+
+| | |
+|---|---|
+| `servidor/token.sh` | Troca **uma** coisa sem encostar no resto. Confere o token contra o GitHub **antes de gravar**, testa os 4 repositórios, faz cópia de segurança e reinicia o serviço |
+| `servidor/doutor.sh` | Consulta completa: segredos, token testado de verdade, espelho, serviços, tarefas presas. **Cada falha vem com o comando que resolve** |
+| `instalar.sh` | Não apaga mais o que já existe: resposta vazia preserva o valor guardado, e ele faz `.bak` antes de gravar |
+| `zeus.js` | Confere o token **ao subir**, não na hora do pedido. Token vencido ou sem permissão aparece no registro antes de estragar um pedido |
+| `zeus.js` | A frase dele deixou de ser beco sem saída: termina dizendo o que fazer |
+
+**Comando para o Paulo quando algo estiver estranho:**
+
+```
+cd /root/eikosistemas/moviki-voice-interface && bash servidor/doutor.sh
+```
+
+### 4.9 🔴 A conversa estava rodando no modelo FORTE, em silêncio
+
+O `instalar.sh` gravava `ZEUS_MODELO=claude-opus-5` no arquivo de segredos.
+Como o código lê `process.env.ZEUS_MODELO` antes do padrão, **a VPS anulava em
+silêncio a decisão do #8 de pôr a conversa no modelo rápido.** Era isso que
+fazia o registro mostrar 3,3s a 4,0s por resposta.
+
+Corrigido no instalador. Para arrumar sem reinstalar:
+
+```
+bash servidor/token.sh --modelo-rapido
+```
+
+> **Regra que fica:** configuração que mora na VPS pode anular decisão que mora
+> no código, e anula **em silêncio**. Quando o comportamento não bater com o
+> que o código diz, olhar o `zeus.env` antes de procurar bug.
 
 ## 5. Pendências — em ordem de importância
 
@@ -308,7 +369,6 @@ linha na instrução dele, e é decisão do Paulo, porque custa detalhe.
 
 ### 5.7 🟢 Limpeza
 
-- O texto final do instalador ainda diz "Falta só o Nginx", que confunde — tirar.
 - Conferir se a falha dos dez minutos deixou algum ramo `zeus/…` ou Pull Request pela metade
   em `moviki-app`.
 

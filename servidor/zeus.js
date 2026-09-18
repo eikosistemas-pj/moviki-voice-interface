@@ -46,6 +46,7 @@ import { criarPorta } from './porta.js'
 import { executarProposta } from './oficina.js'
 import { montarProposta } from './trabalho.js'
 import { analisar } from './analise.js'
+import * as patrulha from './patrulha.js'
 
 const PORTA = Number(process.env.ZEUS_PORTA || 8124)
 const LIMITE_DIA = Number(process.env.ZEUS_LIMITE_DIA || 200)
@@ -117,7 +118,12 @@ const FALAS = {
   naoPrevisto: 'Nao sei fazer isso e nao vou inventar. Deixei anotado.',
   vouTrabalhar: 'Vou trabalhar nisso. Te conto quando terminar.',
   vouOlhar: 'Vou olhar o codigo agora. Ja te respondo.',
-  semOficina: 'Ainda nao tenho acesso para mexer no codigo. Falta o token do GitHub aqui na maquina.',
+  // A frase antiga era verdadeira e inutil: dizia que faltava o token e
+  // acabava ali. Nao dizia se nunca foi posto, se foi apagado ou se venceu — e
+  // cada uma tem conserto diferente. Agora ela termina com o que fazer.
+  semOficina:
+    'Nao tenho o token do GitHub aqui, entao nao consigo mexer no codigo. ' +
+    'Rode o doutor na VPS que ele diz exatamente o que fazer.',
   ondeMexer: 'Nao entendi em qual parte do Moviki e para mexer. Me diga o painel, o site, o atendente ou as redes.',
 }
 
@@ -567,6 +573,43 @@ function manterOlhosAbertos() {
 }
 
 /**
+ * As maos funcionam? Token presente NAO quer dizer token bom.
+ *
+ * Ele pode ter vencido, ter sido revogado, ou nunca ter recebido permissao nos
+ * repositorios certos. Os tres dao erros diferentes na hora de abrir o Pull
+ * Request — e essa hora e sempre a pior hora.
+ */
+function conferirMaos() {
+  const token = process.env.ZEUS_GITHUB_TOKEN
+  if (!token) {
+    console.warn(
+      '[zeus] ATENCAO: sem ZEUS_GITHUB_TOKEN. Ele conversa e analisa, mas NAO ' +
+        'abre Pull Request. Conserto: bash servidor/token.sh'
+    )
+    return
+  }
+  fetch('https://api.github.com/user', {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'zeus-moviki',
+    },
+  })
+    .then(async (r) => {
+      if (r.ok) {
+        const quem = await r.json().catch(() => ({}))
+        console.log(`[zeus] maos ok: o GitHub reconhece o token (${quem.login || '?'})`)
+        return
+      }
+      console.error(
+        `[zeus] ATENCAO: o GitHub RECUSOU o token (${r.status}). ` +
+          'Ele vai falhar ao abrir Pull Request. Conserto: bash servidor/token.sh'
+      )
+    })
+    .catch((e) => console.warn('[zeus] nao consegui conferir o token agora:', e?.message || e))
+}
+
+/**
  * A RONDA — o Zeus olhando em volta sem ninguem pedir.
  *
  * De cinco em cinco minutos ele confere a maquina, a voz e os Pull Requests
@@ -610,6 +653,73 @@ function ronda() {
     .catch((e) => console.error('[zeus] a ronda falhou:', e?.message || e))
 }
 
+/**
+ * A PATRULHA — ele lendo o codigo sem ninguem pedir.
+ *
+ * O `vigia` da ronda percebe coisa da MAQUINA (memoria, voz, Pull Request
+ * parado) — contas que o servidor faz de graca. A patrulha e o degrau
+ * seguinte: ela LE O CODIGO procurando problema, e e o primeiro pedaco do Zeus
+ * que gasta dinheiro sem ninguem ter pedido.
+ *
+ * Por isso os freios moram aqui, visiveis: so o que mudou, um repositorio de
+ * cada vez, teto proprio por dia, e o padrao e o silencio. Ver patrulha.js.
+ */
+function sairEmPatrulha() {
+  if (!OLHOS_LIGADOS) return
+  if (process.env.ZEUS_PATRULHA === '0') return
+
+  const atual = estado.ler()
+  const hoje = estado.diaUTC()
+  const jaForam = patrulha.patrulhasHoje(atual, hoje)
+  if (jaForam >= patrulha.TETO_DIA) {
+    console.log(`[zeus] patrulha: ja fiz ${jaForam} hoje, parando por aqui`)
+    return
+  }
+
+  olhos
+    .shaDosRepos()
+    .then(async (commits) => {
+      const alvo = patrulha.escolherAlvo(commits, patrulha.jaOlhados(atual))
+      if (!alvo) {
+        console.log('[zeus] patrulha: nada mudou desde a ultima olhada')
+        return
+      }
+
+      console.log(`[zeus] saindo em patrulha no ${alvo}`)
+      const achado = await patrulha.patrulhar({ repo: alvo })
+
+      // Marca como visto ACONTECA O QUE ACONTECER. Sem isso, um repositorio
+      // que da erro seria olhado de novo a cada rodada, para sempre.
+      const agora = estado.ler()
+      patrulha.marcarOlhado(agora, alvo, commits[alvo])
+      patrulha.contarPatrulha(agora, hoje)
+
+      if (achado) {
+        // Passa pelas MESMAS regras do vigia: cada assunto fala uma vez e ha
+        // descanso entre avisos. A patrulha nao ganha passe livre so por ter
+        // custado uma chamada paga.
+        const ultimo = Math.max(
+          0,
+          ...Object.values(agora.chamadosDados || {}).map(Number).filter(Boolean)
+        )
+        const desteAssunto = Number(agora.chamadosDados?.[achado.chave]) || 0
+        const cedoDemais = ultimo && Date.now() - ultimo < 10 * 60 * 1000
+        const repetido = Date.now() - desteAssunto < 6 * 60 * 60 * 1000
+
+        if (cedoDemais || repetido) {
+          console.log(`[zeus] patrulha achou algo no ${alvo}, mas e cedo para falar de novo`)
+        } else {
+          estado.enfileirarChamado(agora, achado.chave, achado.fala)
+          estado.anotar(agora, { o: 'patrulha', resumo: `achei no ${alvo}: ${achado.fala.slice(0, 120)}` })
+          console.log(`[zeus] patrulha vai chamar o Paulo sobre o ${alvo}`)
+        }
+      }
+
+      estado.gravar(agora)
+    })
+    .catch((e) => console.error('[zeus] a patrulha falhou:', e?.message || e))
+}
+
 servidor.listen(PORTA, '127.0.0.1', () => {
   console.log(`[zeus] de pe em 127.0.0.1:${PORTA} — teto de ${LIMITE_DIA} falas/dia`)
   console.log(
@@ -645,6 +755,24 @@ servidor.listen(PORTA, '127.0.0.1', () => {
   setTimeout(ronda, 60_000)
   const rondaTimer = setInterval(ronda, 5 * 60 * 1000)
   if (typeof rondaTimer.unref === 'function') rondaTimer.unref()
+
+  // A primeira patrulha com bastante folga: subir o servico ja e um momento de
+  // maquina ocupada, e os espelhos ainda estao sendo atualizados.
+  setTimeout(sairEmPatrulha, 5 * 60 * 1000)
+  const patrulhaTimer = setInterval(sairEmPatrulha, patrulha.INTERVALO_MS)
+  if (typeof patrulhaTimer.unref === 'function') patrulhaTimer.unref()
+  console.log(
+    process.env.ZEUS_PATRULHA === '0'
+      ? '[zeus] patrulha DESLIGADA'
+      : `[zeus] patrulha ligada: olha o codigo a cada ${Math.round(patrulha.INTERVALO_MS / 60000)} min, ate ${patrulha.TETO_DIA} vezes por dia`
+  )
+  // AS MAOS, CONFERIDAS AO SUBIR — nao na hora do pedido.
+  //
+  // O Paulo pediu uma alteracao e ouviu "nao tenho o token". Descobrir isso no
+  // momento do pedido e tarde: ele ja gastou a vontade de pedir. Agora o
+  // servico grita no registro assim que sobe, e diz o comando que resolve.
+  conferirMaos()
+
   if (!porta.exigeSenha()) {
     console.warn(
       '[zeus] ATENCAO: sem ZEUS_SENHA configurada. A porta esta ABERTA — ' +

@@ -64,7 +64,7 @@ pm2 restart frontend-vite
 | #7 | **As mãos** — ordem falada vira Pull Request, em ramo `zeus/…`, nos 4 repositórios permitidos |
 | #8 | Ele passou a **chamar o Paulo por voz** sozinho: "Paulo, terminei…", "Paulo, deu alguma coisa errada aqui" |
 | #9 | O conserto do trabalho: ele troca **um trecho** do arquivo em vez de reescrever meio milhão de caracteres |
-| #10 | **A demora atacada de verdade** — ver seção 4 |
+| #10 | **A demora atacada de verdade**, o fim das tarefas zumbis, e **os olhos que respondem** — ver seção 4 |
 
 **Custo:** a conversa roda no modelo barato (Haiku), o trabalho de código no modelo forte (Opus).
 O mapa mestre viaja no bloco com desconto de cache — quem repete a mesma base paga menos.
@@ -229,11 +229,12 @@ O Paulo foi direto: *"eu quero um robô que pense sozinho, ache problemas e
 resolva, para eu poder descansar."* O que separa o Zeus de hoje disso — em
 ordem, e nenhum deles é trava de segurança:
 
-1. 🔴 **Ele não sabe ANALISAR.** Pedir "analise o painel do parceiro" não cai em
-   lugar nenhum: não tem verbo de mudança, então vira conversa — e na conversa
-   ele só tem o retrato, não o código. **Ele tem as ferramentas de ler e buscar,
-   mas só dentro do caminho que termina em Pull Request.** Falta um caminho de
-   leitura que responda em voz, sem abrir PR. É o buraco mais visível.
+1. ✅ **Ele já sabe ANALISAR** — feito em `servidor/analise.js`. "Analise o
+   painel do parceiro", "dá uma olhada no site", "verifica se tem problema no
+   atendente": ele lê o código de verdade e responde em voz, **sem abrir Pull
+   Request e sem mexer em nada**. Não existe ferramenta de escrever nesse
+   caminho. Prazo de 5 minutos — análise que demora não serve para quem está
+   esperando falando.
 2. 🟡 **Ele não acha problema sozinho.** A ronda só olha máquina, voz e PR
    parado. Não lê código atrás de coisa quebrada.
 3. 🟡 **Ele não conversa sobre o trabalho enquanto trabalha.** É tudo ou nada:

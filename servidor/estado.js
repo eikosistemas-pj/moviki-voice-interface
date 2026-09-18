@@ -118,11 +118,15 @@ export function lembrarFala(estado, papel, texto) {
 // descobriria o Pull Request por acaso, dias depois, sem lembrar de ter
 // pedido.
 
-export function abrirTarefa(estado, { ordem, repo }) {
+export function abrirTarefa(estado, { ordem, repo, tipo = 'trabalho' }) {
   const id = `t${Date.now().toString(36)}`
   estado.tarefas = [
     ...(estado.tarefas || []),
-    { id, ordem, repo, estado: 'trabalhando', em: new Date().toISOString(), contada: false },
+    // `tipo` separa "ele mexeu no codigo" de "ele olhou e me responde". As
+    // duas correm por fora da conversa, mas o que o Zeus FALA no fim e
+    // completamente diferente: uma entrega um Pull Request, a outra entrega
+    // uma resposta.
+    { id, ordem, repo, tipo, estado: 'trabalhando', em: new Date().toISOString(), contada: false },
   ].slice(-50)
   return id
 }

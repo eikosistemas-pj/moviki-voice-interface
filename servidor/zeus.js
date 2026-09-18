@@ -34,7 +34,7 @@
 
 import http from 'node:http'
 import { decidir, PEDIDOS } from '../lib/turno.js'
-import { entender, pareceTrabalho, repoDoAssunto } from './comando.js'
+import { entender, pareceAnalise, pareceTrabalho, repoDoAssunto } from './comando.js'
 import { montarSystem, pensarEmFluxo } from './cerebro.js'
 import { partirFala } from '../lib/partirFala.js'
 import * as estado from './estado.js'
@@ -45,6 +45,7 @@ import { avaliar } from './vigia.js'
 import { criarPorta } from './porta.js'
 import { executarProposta } from './oficina.js'
 import { montarProposta } from './trabalho.js'
+import { analisar } from './analise.js'
 
 const PORTA = Number(process.env.ZEUS_PORTA || 8124)
 const LIMITE_DIA = Number(process.env.ZEUS_LIMITE_DIA || 200)
@@ -115,6 +116,7 @@ const FALAS = {
   semTurno: 'Isso e decisao sua, e voce esta aqui. Me diga o que fazer.',
   naoPrevisto: 'Nao sei fazer isso e nao vou inventar. Deixei anotado.',
   vouTrabalhar: 'Vou trabalhar nisso. Te conto quando terminar.',
+  vouOlhar: 'Vou olhar o codigo agora. Ja te respondo.',
   semOficina: 'Ainda nao tenho acesso para mexer no codigo. Falta o token do GitHub aqui na maquina.',
   ondeMexer: 'Nao entendi em qual parte do Moviki e para mexer. Me diga o painel, o site, o atendente ou as redes.',
 }
@@ -350,6 +352,48 @@ async function tratarFala(req, res) {
       })
 
     return responderFala(res, 200, FALAS.vouTrabalhar, { turno: atual.turno })
+  }
+
+  // --- Pedido de OLHAR o codigo e responder -------------------------------
+  //
+  // Sem verbo de mudanca, entao nao e trabalho: ninguem vai abrir Pull
+  // Request. Mas tambem nao e conversa pura, porque a resposta certa esta no
+  // CODIGO, e na conversa ele so tem o retrato.
+  //
+  // Este caminho existe porque o Paulo pediu "analise o painel do parceiro" e
+  // nao aconteceu nada. Ele tinha olhos para ler, mas os olhos so abriam
+  // dentro do caminho que termina em Pull Request.
+  //
+  // So entra aqui quando da para saber DE QUAL parte do Moviki ele fala. Sem
+  // isso, segue para a conversa — que responde no geral, como sempre
+  // respondeu. Falso negativo aqui nao quebra nada.
+  if (pareceAnalise(falado)) {
+    const repo = repoDoAssunto(falado)
+    if (repo) {
+      const id = estado.abrirTarefa(atual, { ordem: falado, repo, tipo: 'analise' })
+      estado.anotar(atual, { o: 'analise', resumo: `fui olhar: ${falado.slice(0, 100)}` })
+      estado.gravar(atual)
+
+      // Sem `await`: a resposta sai agora. Ler codigo leva dezenas de segundos
+      // e ele esta na frente da tela esperando uma voz.
+      analisar({ repo, pergunta: falado })
+        .then((r) => {
+          const agora = estado.ler()
+          estado.fecharTarefa(agora, id, r)
+          estado.anotar(agora, {
+            o: 'analise',
+            resumo: r.ok ? `respondi sobre: ${falado.slice(0, 80)}` : `nao deu: ${(r.erros || []).join('; ')}`,
+          })
+          estado.gravar(agora)
+        })
+        .catch((e) => {
+          const agora = estado.ler()
+          estado.fecharTarefa(agora, id, { ok: false, erros: [String(e?.message || e)] })
+          estado.gravar(agora)
+        })
+
+      return responderFala(res, 200, FALAS.vouOlhar, { turno: atual.turno })
+    }
   }
 
   // --- Conversa: a unica rota que pensa, e a unica que corre em fluxo ------

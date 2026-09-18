@@ -287,7 +287,7 @@ export async function ler(repo, caminho, linha, quantas) {
     .join('\n')
 }
 
-async function listar(repo, pasta = '') {
+export async function listar(repo, pasta = '') {
   const alvo = dentroDoRepo(repo, pasta)
   if (!alvo) return '(caminho invalido)'
   try {

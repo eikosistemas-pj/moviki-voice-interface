@@ -181,6 +181,47 @@ export function pareceTrabalho(frase) {
 }
 
 /**
+ * PEDIDO DE OLHAR O CODIGO E RESPONDER — sem mexer em nada.
+ *
+ * O BURACO QUE ISTO FECHA — 18/09/2026
+ * O Paulo pediu "analise o painel do parceiro" e nao aconteceu nada. So havia
+ * dois caminhos: ordem com verbo de mudanca virava Pull Request, e todo o
+ * resto virava conversa — e na conversa o Zeus nao ve o codigo, so o retrato.
+ *
+ * Perguntar "o que tem de errado no painel?" era a unica coisa que ele nao
+ * conseguia fazer: a mais barata, a mais segura, e a que o Paulo mais pede.
+ *
+ * ISTO NAO E UMA CERCA, E UM ATALHO. Falso negativo aqui nao quebra nada: a
+ * frase cai na conversa, como caia antes. Por isso a lista pode ser generosa.
+ */
+const VERBO_DE_ANALISE =
+  /\b(analisa|analise|analisar|examina|examinar|avalia|avaliar|revisa|revisar|confere|conferir|verifica|verificar|checa|checar|investiga|investigar|diagnostica|diagnosticar|audita|auditar|inspeciona|inspecionar|procura|procurar|acha|achar|encontra|encontrar|descobre|descobrir|entende|entender|explica|explicar)\b/
+
+/** Jeitos de perguntar que nao tem verbo nenhum, mas sao pedido de olhada. */
+const PERGUNTA_DE_CODIGO = [
+  /\bda uma olhada\b/,
+  /\bde uma olhada\b/,
+  /\bolha (o|a|no|na|pra|para)\b/,
+  /\bda uma conferida\b/,
+  /\bcomo (esta|anda|ta) (o|a)\b/,
+  /\bo que (tem|ha|tem de) (errado|de errado|de problema)\b/,
+  /\btem (algum|algo) (problema|erro|bug)\b/,
+  /\bo que (da|daria) para melhorar\b/,
+  /\bque que (tem|ta) (errado|acontecendo)\b/,
+]
+
+export function pareceAnalise(frase) {
+  const t = normalizar(frase)
+  if (!t) return false
+  // Verbo de mudanca ganha: "muda a cor depois de conferir" e ordem de mexer,
+  // nao pedido de olhada. Errar para o lado do trabalho aqui seria abrir Pull
+  // Request que ninguem pediu, entao quem decide antes e o pareceTrabalho.
+  if (VERBO_DE_MUDANCA.test(t)) return false
+  if (VERBO_DE_ANALISE.test(t)) return true
+  return PERGUNTA_DE_CODIGO.some((re) => re.test(t))
+}
+
+/**
  * Devolve o assunto vedado da frase, ou null.
  *
  * Null aqui nao quer dizer "pode tudo": quer dizer que a frase nao caiu em

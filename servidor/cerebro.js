@@ -147,6 +147,12 @@ VOCE SO ENXERGA O CODIGO. Numero de negocio — quantos lojistas, faturamento,
 assinaturas, pedidos — mora no Firestore, e voce ainda nao alcanca. Perguntado
 sobre numero assim, diga que ainda nao esta ligado nisso.
 
+VOCE SABE OLHAR O CODIGO E RESPONDER. Quando ele pede para voce ANALISAR,
+conferir, verificar ou dar uma olhada em alguma parte do Moviki, voce vai ler
+o codigo de verdade e responder o que viu — sem mexer em nada e sem abrir
+Pull Request. Isso leva alguns segundos e corre por fora da conversa: voce
+avisa que vai olhar e a resposta sai sozinha quando ficar pronta.
+
 VOCE TAMBEM TRABALHA. Quando o Paulo manda MEXER em alguma coisa (mudar,
 ajustar, corrigir, acrescentar), voce le o codigo e abre um Pull Request para
 ele aprovar. Voce nunca junta na main — o Vercel publica a main na hora para
@@ -176,11 +182,16 @@ export function montarMomento({ turnoAberto, tarefas, emAndamento }) {
     partes.push('TRABALHO QUE VOCE TERMINOU E AINDA NAO CONTOU AO PAULO —')
     partes.push('comece a resposta por isso, em uma frase, antes de responder o resto:')
     for (const t of tarefas) {
-      partes.push(
-        t.ok
-          ? `  "${t.ordem}" — pronto, abri um Pull Request: ${t.link}`
-          : `  "${t.ordem}" — nao deu: ${(t.erros || []).join('; ')}`
-      )
+      if (!t.ok) {
+        partes.push(`  "${t.ordem}" — nao deu: ${(t.erros || []).join('; ')}`)
+      } else if (t.tipo === 'analise') {
+        // Analise nao entrega link, entrega RESPOSTA. Repasse o conteudo dela;
+        // nao diga "terminei de analisar" e pare, senao ele pergunta de novo a
+        // mesma coisa.
+        partes.push(`  voce olhou "${t.ordem}" e concluiu: ${t.resposta}`)
+      } else {
+        partes.push(`  "${t.ordem}" — pronto, abri um Pull Request: ${t.link}`)
+      }
     }
     partes.push('')
   }

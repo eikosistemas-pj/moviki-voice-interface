@@ -1,6 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { pareceAnalise, pareceBusca, pareceTrabalho, repoDoAssunto } from './comando.js'
+import {
+  pareceAnalise,
+  pareceAnotacao,
+  pareceBusca,
+  pareceTrabalho,
+  repoDoAssunto,
+} from './comando.js'
 import { ferramentaDeBusca } from './busca.js'
 import { fraseDeAviso } from './aviso.js'
 
@@ -238,4 +244,67 @@ test('toda busca tem teto de quantas vezes procura', () => {
   // Cada busca e paga. Sem teto, uma pergunta vaga viraria dez buscas atras de
   // uma resposta que nao existe.
   assert.ok(ferramentaDeBusca('claude-opus-5').max_uses > 0)
+})
+
+// ---------------------------------------------------------------------------
+// A ORDEM QUE NAO VIRAVA ORDEM
+// ---------------------------------------------------------------------------
+//
+// Paulo, 18/09/2026: *"cada tarefa pedida a ele nao esta virando tarefa na
+// cabeca dele. Ela nao se torna uma ordem. Ele escuta, aceita, mas nao
+// executa."*
+//
+// A causa era a lista de verbos: tinha "muda" e "altera", e faltava quase tudo
+// que uma pessoa diz de verdade. Sem verbo, o pedido caia na conversa — e na
+// conversa o Zeus responde bonito, concorda, e nao abre Pull Request nenhum.
+
+test('o jeito que o Paulo manda fazer vira ordem', () => {
+  for (const f of [
+    'arruma o rodape do site',
+    'coloca um botao novo no painel do lojista',
+    'cria uma aba de relatorio no painel',
+    'conserta o texto da pagina principal',
+    'poe o link da newsletter no rodape',
+    'acrescenta um campo de telefone no cadastro',
+    'tira aquele aviso do painel',
+    'atualiza o texto do site',
+    'substitui a imagem do site',
+  ]) {
+    assert.equal(pareceTrabalho(f), true, `"${f}" tinha que virar ordem`)
+  }
+})
+
+test('pedido educado tambem e ordem', () => {
+  // "Eu queria que o botao fosse verde" e ordem tanto quanto "muda o botao".
+  assert.equal(pareceTrabalho('quero que o botao do site fique verde'), true)
+  assert.equal(pareceTrabalho('preciso que voce arrume o painel'), true)
+})
+
+test('pergunta sobre a IDEIA continua sendo conversa', () => {
+  // A duvida ali e sobre a ideia, nao sobre o fazer. Errar aqui abriria Pull
+  // Request que ninguem pediu.
+  assert.equal(pareceTrabalho('o que voce acha de mudar a cor do site'), false)
+  assert.equal(pareceTrabalho('sera que vale mudar o site'), false)
+  assert.equal(pareceTrabalho('como esta o painel do lojista'), false)
+  assert.equal(pareceTrabalho('bom dia'), false)
+})
+
+test('ordem permanente vai para o caderno, nao para o codigo', () => {
+  // "De agora em diante use verde no botao" tem verbo de mudanca dentro. Sem a
+  // rota do caderno na frente, viraria uma alteracao AGORA — quando o que ele
+  // quis foi estabelecer a regra.
+  for (const f of [
+    'de agora em diante use verde nos botoes',
+    'anota isso: nunca mexa no rodape sem perguntar',
+    'daqui pra frente sempre me avise antes',
+    'nunca mais mexa no preco',
+  ]) {
+    assert.equal(pareceAnotacao(f), true, `"${f}" tinha que ir para o caderno`)
+  }
+})
+
+test('ordem comum NAO vai para o caderno', () => {
+  // O caderno viaja em toda chamada: cada linha e paga para sempre.
+  assert.equal(pareceAnotacao('muda a cor do botao do site'), false)
+  assert.equal(pareceAnotacao('como esta o painel'), false)
 })

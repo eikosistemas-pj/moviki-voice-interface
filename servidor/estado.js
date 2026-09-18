@@ -28,8 +28,25 @@ import path from 'node:path'
 
 const ARQUIVO = process.env.ZEUS_ESTADO || './dados/estado.json'
 
-/** Quantas falas do Paulo o Zeus carrega de contexto. ~10 idas e vindas. */
-const MAX_CONVERSA = 20
+/**
+ * Quantas falas o Zeus carrega de contexto.
+ *
+ * ERA 20 — DEZ IDAS E VINDAS — E ERA POUCO DEMAIS. 18/09/2026
+ * O Paulo: *"voce terminou a conversa com ele, volta a conversar daqui a uns
+ * tempinhos, e ele esqueceu totalmente."*
+ *
+ * Nao era falha de gravacao: a conversa E gravada em disco e sobrevive a
+ * restart. O que acontecia e que ela ROLAVA. Vinte falas somem numa conversa de
+ * dez minutos, e o que foi dito de manha ja nao existia a tarde.
+ *
+ * Subir para 60 (trinta idas e vindas) custa alguns milhares de tokens por
+ * chamada — que viajam no pedaco SEM desconto de cache, entao nao e de graca.
+ * Mas assistente que esquece o que voce disse ha uma hora nao serve, e esse
+ * custo e menor que o de repetir tudo.
+ *
+ * Para o que nao pode rolar NUNCA, existe o caderno (`lembrar`), abaixo.
+ */
+const MAX_CONVERSA = Number(process.env.ZEUS_MAX_CONVERSA || 60)
 
 /** Quantos itens da trilha ficam guardados antes de o mais velho cair. */
 const MAX_TRILHA = 200
@@ -98,6 +115,40 @@ export function anotar(estado, item) {
     { em: new Date().toISOString(), ...item },
   ].slice(-MAX_TRILHA)
   return estado
+}
+
+// ---------------------------------------------------------------------------
+// O CADERNO — o que NUNCA rola para fora da memoria
+// ---------------------------------------------------------------------------
+//
+// A conversa rola: o que foi dito ha muitas falas sai. Para quase tudo isso e
+// bom — ninguem precisa lembrar do "bom dia" de ontem.
+//
+// Mas algumas coisas nao podem sair nunca: uma decisao que o Paulo tomou, um
+// jeito de fazer que ele pediu, uma correcao que ele deu. Se essas rolarem
+// junto com o resto, ele repete a mesma instrucao toda semana — e foi disso
+// que o Paulo reclamou quando pediu um "super cerebro".
+//
+// O caderno e pequeno de proposito. Ele viaja em TODA chamada, entao cada linha
+// aqui e paga para sempre. Caderno que vira diario deixa de ser memoria e vira
+// peso: o que importa se perde no meio do que nao importa.
+
+/** Quantas anotacoes o caderno guarda. Pequeno de proposito — ver acima. */
+const MAX_CADERNO = Number(process.env.ZEUS_MAX_CADERNO || 40)
+
+export function anotarNoCaderno(estado, texto) {
+  const limpo = String(texto || '').trim()
+  if (!limpo) return estado
+  const antes = estado.caderno || []
+  // Nao repetir a mesma anotacao: o Paulo diz a mesma coisa de jeitos
+  // parecidos, e o caderno encheria de duplicata.
+  if (antes.some((a) => a.texto.toLowerCase() === limpo.toLowerCase())) return estado
+  estado.caderno = [...antes, { em: new Date().toISOString(), texto: limpo }].slice(-MAX_CADERNO)
+  return estado
+}
+
+export function lerCaderno(estado) {
+  return estado.caderno || []
 }
 
 export function lembrarFala(estado, papel, texto) {
@@ -250,6 +301,35 @@ export function enterrarOrfas(estado, { limiteMs = 0, motivo, agora = Date.now()
     return morta
   })
   return enterradas
+}
+
+/**
+ * O QUE ELE TERMINOU NAS ULTIMAS HORAS — ja contado ou nao.
+ *
+ * ---------------------------------------------------------------------------
+ * O "EITA, ESQUECI" — 18/09/2026
+ * ---------------------------------------------------------------------------
+ * O Paulo pediu uma coisa, o Zeus comecou, e meia hora depois ele disse que
+ * tinha esquecido. Nao era memoria falha: era desenho.
+ *
+ * `tarefasParaContar` filtra `!contada`. Assim que o aviso sai pela boca UMA
+ * vez, a tarefa e marcada como contada — e a partir daquele instante ela
+ * DESAPARECE do que o Zeus ve. Se o Paulo estava longe da tela, ou a fala nao
+ * saiu, ou ele simplesmente perguntou depois, o Zeus olha a lista, nao acha
+ * nada, e responde com honestidade que nao tem registro. Do lado de ca isso
+ * soa como "esqueci".
+ *
+ * Contar uma vez nao pode ser o mesmo que apagar. Esta lista e a memoria do
+ * que ele fez — ele para de esquecer e passa a poder dizer "aquilo terminou as
+ * duas e meia, o Pull Request e esse".
+ */
+export function tarefasRecentes(estado, horas = 12, agora = Date.now()) {
+  const desde = agora - horas * 60 * 60 * 1000
+  return (estado.tarefas || []).filter((t) => {
+    if (t.estado === 'trabalhando') return false
+    const quando = new Date(t.fimEm || t.em).getTime()
+    return Number.isFinite(quando) && quando >= desde
+  })
 }
 
 export function marcarContadas(estado) {

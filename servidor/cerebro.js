@@ -137,6 +137,18 @@ coisa ja levou. Essa lista e a unica verdade sobre isso.
 Dizer "ainda estou nisso" sobre algo que morreu ha horas e a pior coisa que
 voce pode fazer com o Paulo: ele fica esperando em vez de tocar a vida.
 
+VOCE TEM UM CADERNO. Quando o Paulo toma uma decisao, te corrige, ou diz como
+ele quer que uma coisa seja feita daqui para frente, isso fica anotado e volta
+para voce em TODA conversa — mesmo semanas depois. Trate o que estiver ali como
+ordem permanente dele. Se ele disser algo que contraria o caderno, o mais NOVO
+ganha: ele mudou de ideia, e quem manda e ele.
+
+E O CONTRARIO TAMBEM E PROIBIDO: VOCE NAO ESQUECE.
+Voce tambem recebe a lista do que JA TERMINOU nas ultimas horas, com o horario
+e o resultado. Se ele perguntar de qualquer coisa que esteja nela, responda
+pela lista. NUNCA diga "esqueci", "nao lembro" ou "nao tenho registro" sobre
+algo que esta ali — ja ter contado uma vez nao apaga o que aconteceu.
+
 VOCE TEM OLHOS, MAS NAO ADIVINHA. A cada conversa voce recebe o mapa oficial
 do projeto e o estado real dos repositorios, lido do codigo. Use como fato. O
 que nao estiver ali voce NAO sabe — e "nao estou ligado nisso" e melhor
@@ -188,12 +200,22 @@ que voce existe para tirar.`
  * quinze em quinze minutos, nao a cada frase, e mandar dois mil tokens dele a
  * preco cheio toda vez era demora e dinheiro jogados fora.
  */
-export function montarMomento({ turnoAberto, tarefas, emAndamento }) {
+export function montarMomento({ turnoAberto, tarefas, emAndamento, recentes, caderno }) {
   const turno = turnoAberto
     ? 'ABERTO — o Paulo saiu e passou o posto para voce. Pode decidir dentro da cerca, e vai prestar contas quando ele chegar.'
     : 'FECHADO — o Paulo esta aqui. Voce executa o que ele mandar e nao decide nada no lugar dele.'
 
   const partes = [`TURNO AGORA: ${turno}`, '']
+
+  // O CADERNO. O que o Paulo ja te disse e nao quer repetir.
+  //
+  // A conversa rola; isto nao. Sao as decisoes e correcoes dele, guardadas para
+  // ele nao ter que dizer a mesma coisa toda semana.
+  if (caderno?.length) {
+    partes.push('O QUE O PAULO JA TE DISSE — vale como ordem permanente:')
+    for (const a of caderno) partes.push(`  - ${a.texto}`)
+    partes.push('')
+  }
 
   // O trabalho corre por fora da conversa e termina sozinho. Se o Zeus nao
   // contar na primeira oportunidade, o Paulo descobre o Pull Request dias
@@ -214,6 +236,32 @@ export function montarMomento({ turnoAberto, tarefas, emAndamento }) {
       }
     }
     partes.push('')
+  }
+
+  // O QUE ELE JA TERMINOU HOJE — mesmo o que ja foi contado uma vez.
+  //
+  // Sem isto ele ESQUECE. Assim que o aviso saia pela boca, a tarefa sumia do
+  // que ele enxerga: o Paulo perguntava meia hora depois e o Zeus, honesto,
+  // dizia que nao tinha registro — o que soa exatamente como "eita, esqueci".
+  //
+  // Contar uma vez nao pode ser o mesmo que apagar.
+  if (recentes?.length) {
+    partes.push('O QUE VOCE JA FEZ NAS ULTIMAS HORAS — e a sua memoria, use como fato:')
+    for (const t of recentes) {
+      const quando = t.fimEm ? ` (terminou ${new Date(t.fimEm).toISOString().slice(11, 16)} UTC)` : ''
+      if (!t.ok) {
+        partes.push(`  "${t.ordem}" — NAO DEU${quando}: ${(t.erros || []).join('; ')}`)
+      } else if (t.tipo === 'analise') {
+        partes.push(`  voce olhou "${t.ordem}"${quando} e concluiu: ${t.resposta}`)
+      } else {
+        partes.push(`  "${t.ordem}" — pronto${quando}, Pull Request: ${t.link}`)
+      }
+    }
+    partes.push(
+      'Se ele perguntar de qualquer uma delas, RESPONDA PELA LISTA. Nunca diga',
+      'que esqueceu ou que nao tem registro de coisa que esta aqui.',
+      ''
+    )
   }
 
   // A LISTA COMPLETA DO QUE ESTA EM ANDAMENTO, COM O RELOGIO.
@@ -251,7 +299,7 @@ export function montarMomento({ turnoAberto, tarefas, emAndamento }) {
  * Monta o `system` em blocos. O primeiro (persona + mapa) leva a marca de
  * cache: tudo ate ela e cobrado barato a partir da segunda vez.
  */
-export function montarSystem({ turnoAberto, mapa, retrato, tarefas, emAndamento }) {
+export function montarSystem({ turnoAberto, mapa, retrato, tarefas, emAndamento, recentes, caderno }) {
   const fixo = [montarPersona()]
   if (mapa) {
     fixo.push(
@@ -291,7 +339,7 @@ export function montarSystem({ turnoAberto, mapa, retrato, tarefas, emAndamento 
       text: retrato || '(ainda nao olhei os repositorios; nao afirme nada sobre o estado do codigo)',
       cache_control: { type: 'ephemeral' },
     },
-    { type: 'text', text: montarMomento({ turnoAberto, tarefas, emAndamento }) },
+    { type: 'text', text: montarMomento({ turnoAberto, tarefas, emAndamento, recentes, caderno }) },
   ]
 }
 

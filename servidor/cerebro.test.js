@@ -179,9 +179,11 @@ test('a primeira frase e entregue antes de a resposta acabar', async () => {
 
   assert.equal(r.ok, true)
   assert.ok(pedacos.length > 1, 'devia ter saido em mais de um pedaco')
-  // Frase curta de verdade sai sozinha, na hora: e o pedaco que decide a
-  // demora que o Paulo sente.
-  assert.equal(pedacos[0], 'Terminei o rodape.')
+  // A abertura NAO sai sozinha: ela vai junto com o comeco da explicacao.
+  // "Terminei o rodape." solto deixaria um buraco de segundos antes do resto —
+  // foi o defeito que o Paulo ouviu como "ele responde e depois para".
+  assert.ok(pedacos[0].startsWith('Terminei o rodape.'))
+  assert.ok(pedacos[0].length >= 20, `abertura saiu sozinha: "${pedacos[0]}"`)
   // Nada pode se perder no caminho entre a API e a voz.
   assert.equal(pedacos.join(' '), r.texto)
 })

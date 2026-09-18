@@ -103,9 +103,89 @@ export function entender(frase) {
 // separacao, o Zeus ficaria mudo sobre metade da empresa — e trava que
 // atrapalha o dono vira trava que o dono manda tirar.
 
-/** Verbos que mudam o mundo. Perguntar nao esta aqui, de proposito. */
-const VERBO_DE_MUDANCA =
-  /\b(aprova|aprovar|aprove|junta|juntar|mescla|mesclar|merge|sobe|subir|publica|publicar|posta|postar|muda|mudar|mude|altera|alterar|troca|trocar|aumenta|aumentar|reduz|reduzir|baixa|baixar|apaga|apagar|apague|deleta|deletar|remove|remover|cancela|cancelar|paga|pagar|transfere|transferir|libera|liberar|desliga|desligar|reajusta|reajustar|zera|zerar|derruba|derrubar)\b/
+/**
+ * VERBOS QUE MUDAM O MUNDO. Perguntar nao esta aqui, de proposito.
+ *
+ * ---------------------------------------------------------------------------
+ * A LISTA ESTAVA CURTA, E ERA POR ISSO QUE ELE NAO EXECUTAVA — 18/09/2026
+ * ---------------------------------------------------------------------------
+ * O Paulo: *"cada tarefa que e pedida a ele nao esta virando tarefa na cabeca
+ * dele. Ela nao se torna uma ordem. Ele escuta, aceita, mas nao executa."*
+ *
+ * Estava certo, e a causa era esta lista. Ela tinha "muda", "altera", "troca" —
+ * e faltava quase tudo que uma pessoa diz de verdade quando manda fazer algo:
+ *
+ *     "arruma isso"        "coloca um botao ali"
+ *     "cria uma aba"       "poe o texto novo"
+ *     "conserta o rodape"  "acrescenta o link"
+ *     "faz isso pra mim"   "resolve esse problema"
+ *
+ * Nenhum desses casava. Sem verbo de mudanca, `pareceTrabalho` dava falso, o
+ * pedido caia na CONVERSA — e na conversa o Zeus responde bonito, concorda, e
+ * nao abre Pull Request nenhum. Do lado de ca: ele escuta, aceita e nao faz.
+ *
+ * ERRAR PARA QUE LADO CUSTA MENOS
+ * Falso positivo aqui abre um Pull Request que o Paulo recusa — aborrecimento
+ * de um minuto. Falso negativo faz a ordem sumir sem ninguem perceber, e o
+ * Paulo descobre horas depois que nada aconteceu. A lista deve ser GENEROSA.
+ *
+ * Perguntar continua fora: "como esta o painel?" e conversa, e "o que voce acha
+ * de mudar a cor?" tambem — a duvida ali e sobre a ideia, nao sobre o fazer.
+ */
+const VERBO_DE_MUDANCA = new RegExp(
+  '\\b(?:' +
+    [
+      // --- os que ja existiam --------------------------------------------
+      'aprova|aprovar|aprove|junta|juntar|junte|mescla|mesclar|merge',
+      'sobe|subir|suba|publica|publicar|publique|posta|postar|poste',
+      'muda|mudar|mude|altera|alterar|altere|troca|trocar|troque',
+      'aumenta|aumentar|aumente|reduz|reduzir|reduza|baixa|baixar|baixe',
+      'apaga|apagar|apague|deleta|deletar|delete|remove|remover|remova',
+      'cancela|cancelar|cancele|paga|pagar|pague',
+      'transfere|transferir|transfira|libera|liberar|libere',
+      'desliga|desligar|desligue|reajusta|reajustar|reajuste',
+      'zera|zerar|zere|derruba|derrubar|derrube',
+
+      // --- OS QUE FALTAVAM, e que sao os que ele mais usa ------------------
+      // "arruma isso", "conserta o rodape", "corrige o texto"
+      'arruma|arrumar|arrume|conserta|consertar|conserte',
+      'corrige|corrigir|corrija|ajusta|ajustar|ajuste',
+      // "coloca um botao", "poe o texto novo", "bota ali"
+      'coloca|colocar|coloque|poe|poem|por|ponha|bota|botar|bote',
+      // "cria uma aba", "faz isso", "monta a tela"
+      'cria|criar|crie|faz|faca|fazer|monta|montar|monte',
+      'gera|gerar|gere|constroi|construir|construa',
+      // "acrescenta o link", "adiciona um campo", "inclui isso"
+      'acrescenta|acrescentar|acrescente|adiciona|adicionar|adicione',
+      'inclui|incluir|inclua|insere|inserir|insira',
+      // "tira aquilo", "esconde o aviso", "some com isso"
+      'tira|tirar|tire|retira|retirar|retire|esconde|esconder|esconda',
+      // "melhora isso", "refaz", "reescreve", "resolve"
+      'melhora|melhorar|melhore|refaz|refazer|refaca',
+      'reescreve|reescrever|reescreva|resolve|resolver|resolva',
+      'implementa|implementar|implemente|aplica|aplicar|aplique',
+      // "renomeia", "move", "organiza", "atualiza"
+      'renomeia|renomear|renomeie|move|mover|mova',
+      'organiza|organizar|organize|atualiza|atualizar|atualize',
+      'instala|instalar|instale|configura|configurar|configure',
+      'ativa|ativar|ative|liga|ligar|ligue|habilita|habilitar|habilite',
+      'desativa|desativar|desative|desabilita|desabilitar|desabilite',
+      // "duplica", "copia pra la", "substitui"
+      'duplica|duplicar|duplique|substitui|substituir|substitua',
+      'padroniza|padronizar|padronize|renova|renovar|renove',
+    ].join('|') +
+    ')\\b'
+)
+
+/**
+ * "Quero que voce...", "preciso que voce...", "pode fazer..." — pedido educado.
+ *
+ * O Paulo nem sempre usa imperativo. "Eu queria que o botao fosse verde" e uma
+ * ordem tanto quanto "muda o botao para verde" — e a primeira nao tem nenhum
+ * verbo da lista acima na forma que ela casa.
+ */
+const PEDIDO_EDUCADO =
+  /\b(quero que|queria que|preciso que|precisava que|gostaria que|pode(ria)? (voce )?(fazer|mudar|colocar|criar|arrumar|ajustar|corrigir)|da para (voce )?(fazer|mudar|colocar|criar|arrumar)|seria bom (se|que)|tem que (ser|ficar|virar)|deixa (ele|isso|a|o) )/
 
 const ASSUNTOS = [
   // O PROPRIO ZEUS vem primeiro: "muda a trava" e sobre ele mesmo, nao sobre
@@ -253,9 +333,36 @@ export function repoDoAssunto(frase) {
  * — o Paulo repete com outras palavras. Errar para o lado do trabalho abre
  * Pull Request que ninguem pediu.
  */
+/**
+ * ORDEM PERMANENTE — o que vai para o caderno e nunca mais sai.
+ *
+ * O Paulo pediu um "super cerebro" porque estava cansado de repetir. Estas sao
+ * as formas em que uma pessoa diz "isto vale de hoje em diante", e elas sao
+ * diferentes de uma ordem comum: "muda o botao" e para agora; "de agora em
+ * diante use verde" e para sempre.
+ *
+ * O caderno viaja em toda chamada, entao cada linha e paga para sempre. Por
+ * isso aqui a lista e ESTREITA, ao contrario da de verbos de mudanca: melhor
+ * ele nao anotar e o Paulo repetir "anota isso" do que o caderno encher de
+ * frase solta e o que importa se perder no meio.
+ */
+const ORDEM_PERMANENTE =
+  /\b(anota (isso|ai|isto)|anote (isso|ai|isto)|lembra (disso|sempre)|lembre (disso|sempre)|nao esquece (disso|mais)|de agora em diante|daqui (pra|para) frente|a partir de agora|de hoje em diante|sempre que voce|toda vez que voce|nunca mais|regra nova|fica valendo|guarda isso)\b/
+
+export function pareceAnotacao(frase) {
+  const t = normalizar(frase)
+  return Boolean(t) && ORDEM_PERMANENTE.test(t)
+}
+
 export function pareceTrabalho(frase) {
   const t = normalizar(frase)
-  return Boolean(t) && VERBO_DE_MUDANCA.test(t)
+  if (!t) return false
+  // Pergunta sobre a IDEIA nao e ordem: "o que voce acha de mudar a cor?" e
+  // conversa. A duvida ali e sobre a ideia, nao sobre o fazer.
+  if (/\b(o que voce acha|voce acha que|sera que|o que e melhor|qual e melhor)\b/.test(t)) {
+    return false
+  }
+  return VERBO_DE_MUDANCA.test(t) || PEDIDO_EDUCADO.test(t)
 }
 
 /**

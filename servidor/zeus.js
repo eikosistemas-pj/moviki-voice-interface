@@ -34,7 +34,14 @@
 
 import http from 'node:http'
 import { decidir, PEDIDOS } from '../lib/turno.js'
-import { entender, pareceAnalise, pareceBusca, pareceTrabalho, repoDoAssunto } from './comando.js'
+import {
+  entender,
+  pareceAnalise,
+  pareceAnotacao,
+  pareceBusca,
+  pareceTrabalho,
+  repoDoAssunto,
+} from './comando.js'
 import { montarSystem, pensarEmFluxo } from './cerebro.js'
 import { partirFala } from '../lib/partirFala.js'
 import * as estado from './estado.js'
@@ -120,6 +127,7 @@ const FALAS = {
   vouTrabalhar: 'Vou trabalhar nisso. Te conto quando terminar.',
   vouOlhar: 'Vou olhar o codigo agora. Ja te respondo.',
   vouProcurar: 'Vou procurar isso na internet. Ja te respondo.',
+  anotei: 'Anotei. Vale de agora em diante, e eu nao esqueco mais.',
   // A frase antiga era verdadeira e inutil: dizia que faltava o token e
   // acabava ali. Nao dizia se nunca foi posto, se foi apagado ou se venceu — e
   // cada uma tem conserto diferente. Agora ela termina com o que fazer.
@@ -381,6 +389,21 @@ async function tratarFala(req, res) {
     })
   }
 
+  // --- ORDEM PERMANENTE: vai para o caderno e nunca mais sai --------------
+  //
+  // Vem antes de tudo o mais porque "de agora em diante use verde no botao"
+  // tem verbo de mudanca dentro. Sem esta rota na frente, viraria uma ordem
+  // de mexer no codigo AGORA — quando o que ele quis foi estabelecer a regra.
+  //
+  // E o conserto do "super cerebro" que o Paulo pediu: a conversa rola, isto
+  // nao. Ele para de ter que repetir a mesma instrucao toda semana.
+  if (pareceAnotacao(falado)) {
+    estado.anotarNoCaderno(atual, falado)
+    estado.anotar(atual, { o: 'caderno', resumo: `anotei: ${falado.slice(0, 120)}` })
+    estado.gravar(atual)
+    return responderFala(res, 200, FALAS.anotei, { turno: atual.turno })
+  }
+
   // --- Pedido de OLHAR PARA FORA: pesquisa na internet --------------------
   //
   // Vem antes da analise de codigo porque "procura" e "acha" estao nas duas
@@ -478,6 +501,10 @@ async function tratarFala(req, res) {
   // O que esta rodando AGORA, com o relogio. Sem isto ele inventava que
   // estava trabalhando porque tinha dito isso uma vez, horas atras.
   const emAndamento = estado.tarefasEmAndamento(atual)
+  // A memoria do que ele ja fez. Sem isto ele "esquece" assim que conta uma vez.
+  const recentes = estado.tarefasRecentes(atual)
+  // O caderno: decisoes e correcoes que nao rolam para fora da memoria.
+  const caderno = estado.lerCaderno(atual)
 
   const canal = abrirFluxo(res)
   const r = await pensarEmFluxo({
@@ -487,6 +514,8 @@ async function tratarFala(req, res) {
       retrato: visao.retrato,
       tarefas: pendentes,
       emAndamento,
+      recentes,
+      caderno,
     }),
     historico: atual.conversa,
     falaNova: falado,

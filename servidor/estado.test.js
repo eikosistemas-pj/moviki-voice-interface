@@ -125,3 +125,74 @@ test('fechar a tarefa guarda quanto ela levou', () => {
   assert.equal(e.tarefas[0].levouMs, 4 * 60 * 1000)
   assert.deepEqual(e.duracoes.trabalho, [4 * 60 * 1000])
 })
+
+// ---------------------------------------------------------------------------
+// O CADERNO E A MEMORIA DO QUE JA FOI FEITO
+// ---------------------------------------------------------------------------
+//
+// Paulo, 18/09/2026: *"voce terminou a conversa com ele, volta daqui a uns
+// tempinhos, e ele esqueceu totalmente"* e *"ele diz: eita, foi mesmo,
+// esqueci"*.
+//
+// Dois esquecimentos diferentes, dois consertos diferentes.
+
+import { anotarNoCaderno, lerCaderno, tarefasRecentes } from './estado.js'
+
+test('contar uma vez nao apaga o que aconteceu', () => {
+  // Era ESTE o "eita, esqueci": assim que o aviso saia pela boca, a tarefa era
+  // marcada como contada e SUMIA do que o Zeus enxerga. Ele perguntava meia
+  // hora depois e o Zeus, honesto, dizia que nao tinha registro.
+  const agora = Date.now()
+  const e = {
+    tarefas: [
+      {
+        id: 't1',
+        ordem: 'muda a cor do botao',
+        estado: 'pronta',
+        ok: true,
+        contada: true,
+        link: 'https://x',
+        em: new Date(agora - 40 * 60 * 1000).toISOString(),
+        fimEm: new Date(agora - 30 * 60 * 1000).toISOString(),
+      },
+    ],
+  }
+  const recentes = tarefasRecentes(e, 12, agora)
+  assert.equal(recentes.length, 1, 'ja contada continua sendo lembrada')
+  assert.equal(recentes[0].link, 'https://x')
+})
+
+test('o que terminou ontem nao polui a memoria de hoje', () => {
+  const agora = Date.now()
+  const e = {
+    tarefas: [
+      { id: 'velha', estado: 'pronta', ok: true, em: '2020-01-01T00:00:00.000Z', fimEm: '2020-01-01T00:10:00.000Z' },
+    ],
+  }
+  assert.equal(tarefasRecentes(e, 12, agora).length, 0)
+})
+
+test('tarefa em andamento nao entra na memoria do que ja foi feito', () => {
+  const agora = Date.now()
+  const e = { tarefas: [{ id: 't1', estado: 'trabalhando', em: new Date(agora).toISOString() }] }
+  assert.equal(tarefasRecentes(e, 12, agora).length, 0)
+})
+
+test('o caderno guarda ordem permanente e nao duplica', () => {
+  // Ele viaja em TODA chamada: cada linha e paga para sempre. Duplicata aqui e
+  // custo eterno.
+  const e = {}
+  anotarNoCaderno(e, 'De agora em diante use verde nos botoes')
+  anotarNoCaderno(e, 'de agora em diante USE VERDE nos botoes')
+  assert.equal(lerCaderno(e).length, 1)
+  anotarNoCaderno(e, 'Nunca mexa no rodape sem me perguntar')
+  assert.equal(lerCaderno(e).length, 2)
+})
+
+test('o caderno ignora anotacao vazia', () => {
+  const e = {}
+  anotarNoCaderno(e, '')
+  anotarNoCaderno(e, '   ')
+  anotarNoCaderno(e, null)
+  assert.deepEqual(lerCaderno(e), [])
+})

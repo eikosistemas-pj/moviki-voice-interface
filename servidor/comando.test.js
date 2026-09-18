@@ -168,3 +168,87 @@ test('so e trabalho quando tem verbo de mudanca', () => {
   assert.equal(pareceTrabalho('muda o texto do painel'), true)
   assert.equal(pareceTrabalho('altera a videoaula'), true)
 })
+
+// ---------------------------------------------------------------------------
+// O GUARDA-PROMESSA — a rede embaixo da lista de verbos
+// ---------------------------------------------------------------------------
+//
+// O Paulo, tres vezes no mesmo dia: "ele aceita, diz que vai fazer, e daqui a
+// dois minutos nao tem nada feito". E o proprio Zeus, para ele: "o disparo nao
+// esta pegando".
+//
+// A lista de verbos conserta as frases que EU consigo imaginar. Estes testes
+// guardam a rede que pega o resto: se o Zeus prometeu, virou tarefa.
+
+import { prometeuFazer } from './comando.js'
+
+test('promessa de mexer vira trabalho', () => {
+  for (const fala of [
+    'Certo. Vou arrumar o rodape agora.',
+    'Pode deixar, eu cuido disso.',
+    'Vou mexer nisso e te aviso quando terminar.',
+    'Ja vou colocar o botao novo.',
+    'Deixa comigo. Te conto quando terminar.',
+    'Entendi. Vou dar um jeito nisso hoje.',
+    'Vou abrir um Pull Request com essa mudanca.',
+    'Ja comecei.',
+  ]) {
+    assert.equal(prometeuFazer(fala), 'trabalho', `nao pegou: "${fala}"`)
+  }
+})
+
+test('promessa de olhar vira analise, nao Pull Request', () => {
+  for (const fala of [
+    'Vou olhar o painel agora e ja te respondo.',
+    'Vou conferir o codigo do site.',
+    'Ja vou dar uma olhada nisso.',
+  ]) {
+    assert.equal(prometeuFazer(fala), 'analise', `nao pegou: "${fala}"`)
+  }
+})
+
+test('quem promete olhar E arrumar esta prometendo arrumar', () => {
+  // Entregar a coisa maior cobre a menor. O contrario deixaria o Paulo com uma
+  // analise quando ele pediu conserto.
+  assert.equal(prometeuFazer('Vou olhar o rodape e corrigir o texto.'), 'trabalho')
+})
+
+test('NEGACAO NAO E PROMESSA — e este e o erro que custaria caro', () => {
+  // "nao vou mexer nisso" e o Zeus RECUSANDO. Disparar aqui abriria Pull
+  // Request exatamente onde ele acabou de dizer que nao encosta.
+  for (const fala of [
+    'Isso e seu, nao meu. Nao vou mexer no preco.',
+    'Nao vou alterar nada sem voce confirmar.',
+    'Nao vou olhar isso agora.',
+  ]) {
+    assert.equal(prometeuFazer(fala), null, `disparou numa recusa: "${fala}"`)
+  }
+})
+
+test('conversa comum nao e promessa', () => {
+  for (const fala of [
+    'O painel do lojista mudou essa semana. Entrou uma aba nova.',
+    'Nao tenho registro disso em andamento. E para comecar agora?',
+    'Vou te explicar: o Premium custa setenta e nove reais.',
+    'Isso e decisao sua, e voce esta aqui.',
+  ]) {
+    assert.equal(prometeuFazer(fala), null, `promessa onde nao havia: "${fala}"`)
+  }
+})
+
+test('a cerca do assunto vedado fecha tambem sem verbo na frase do Paulo', () => {
+  // ESTE E O BURACO QUE O CAMINHO NOVO ABRIRIA. Quem disse "vou ajustar" foi o
+  // ZEUS, entao o verbo de mudanca nao esta na frase do Paulo — e a cerca do
+  // preco e do dinheiro nao pode depender disso para existir.
+  assert.equal(assuntoVedado('e o Premium, da para ficar mais caro?'), null)
+  assert.equal(
+    assuntoVedado('e o Premium, da para ficar mais caro?', { exigeVerbo: false }),
+    'preco'
+  )
+  assert.equal(
+    assuntoVedado('aquela comissao do parceiro ta estranha', { exigeVerbo: false }),
+    'dinheiro'
+  )
+  // E o caminho antigo continua igual: conversa sobre preco segue livre.
+  assert.equal(assuntoVedado('quanto custa o Premium hoje'), null)
+})

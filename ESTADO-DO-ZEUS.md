@@ -433,6 +433,74 @@ piso alto. Agora, no fim, ele leva tudo o que sobrou de uma vez.
 buraco de quatro segundos no meio. **Quem ouve não cronometra o começo — quem
 ouve percebe a pausa.**
 
+## 4.12 🔴 "O disparo não está pegando" — e a lista de verbos não bastava
+
+Ainda 18/09/2026, fim do dia. O Paulo, pela **terceira vez no mesmo dia**:
+
+> *"Ele aceita, diz que vai fazer, depois daqui a dois minutos ele diz que ainda
+> é pra eu fazer."*
+
+E o próprio Zeus, falando com ele:
+
+> *"O disparo não está pegando."*
+
+**Ele estava certo, e a frase dele descreve o defeito melhor do que eu
+descreveria.** A ordem caía na conversa em vez de virar tarefa. Dois minutos
+depois, olhando a lista de tarefas em andamento — vazia, e honestamente vazia —
+ele dizia que não havia nada. Não era mentira dele: era verdade sobre um disparo
+que nunca aconteceu.
+
+### O que a correção anterior conserta, e o que ela não conserta
+
+A 4.11.1 alargou a lista de verbos. Isso conserta **as frases que eu consegui
+imaginar**. Mas uma lista de verbos é uma aposta sobre o vocabulário de outra
+pessoa, e **toda aposta dessas perde um dia**: basta o Paulo dizer *"dá um jeito
+naquele rodapé"* — nenhum verbo da lista — para a ordem sumir de novo, do mesmo
+jeito, e ele descobrir horas depois.
+
+Eu não ia ganhar isso escrevendo listas maiores.
+
+### A rede embaixo: se ele prometeu, virou tarefa
+
+`servidor/promessa.js` — novo.
+
+Depois que o Zeus responde, o servidor lê **a resposta dele**. Se ela foi uma
+promessa — *"vou arrumar"*, *"pode deixar"*, *"vou dar uma olhada"* — a promessa
+**vira tarefa naquele segundo**.
+
+**A rede não depende de eu adivinhar palavra nenhuma.** Quem classifica deixa de
+ser a minha lista e passa a ser o próprio Zeus, que leu a frase inteira, com o
+contexto todo, e entendeu que era ordem. Ele é melhor nisso do que qualquer
+expressão regular que eu escreva.
+
+| O que ele disse | O que acontece agora |
+|---|---|
+| "Pode deixar, vou arrumar o rodapé" | Abre a tarefa e trabalha |
+| "Vou conferir o painel e já te respondo" | Abre a **análise** (lê, não mexe) |
+| "Vou arrumar isso" (sem dizer onde) | Pergunta **na mesma resposta** em que parte é |
+| "Não vou mexer no preço" | **Nada.** Recusa não é promessa |
+| "O painel mudou essa semana" | Nada. Conversa é conversa |
+
+**A regra, em uma linha: promessa sem tarefa é mentira.** Ou ele não promete, ou
+o que ele prometeu começa a acontecer de verdade.
+
+### A cerca que quase ficou aberta — e que é a parte importante
+
+O caminho novo dispara com o verbo de mudança **na resposta do Zeus**, não na
+frase do Paulo. A trava do preço e do dinheiro (`assuntoVedado`) exigia o verbo
+**na frase do Paulo**.
+
+Ou seja: *"e o Premium, dá para ficar mais caro?"* respondido com *"vou
+ajustar"* passaria por baixo da cerca — e eu teria aberto, com um conserto,
+exatamente a porta que a trava existe para manter fechada.
+
+`assuntoVedado` ganhou `{ exigeVerbo: false }`, usado **só** nesse caminho. Tem
+teste próprio, e ele é o teste mais importante do arquivo.
+
+O prompt dele também mudou: **"sua palavra dispara o trabalho"** — prometa
+quando for para fazer, não por educação, e pergunte em que parte do Moviki é
+antes de prometer.
+
 ## 5. Pendências — em ordem de importância
 
 ### 5.1 🔴 Trocar a chave da Anthropic (do Paulo, urgente)

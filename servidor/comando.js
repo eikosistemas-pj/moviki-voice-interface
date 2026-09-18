@@ -447,18 +447,84 @@ export function pareceAnalise(frase) {
   return PERGUNTA_DE_CODIGO.some((re) => re.test(t))
 }
 
+// ---------------------------------------------------------------------------
+// O QUE O ZEUS PROMETEU COM A PROPRIA BOCA
+// ---------------------------------------------------------------------------
+//
+// O DEFEITO QUE ISTO FECHA — 18/09/2026, ultima rodada do dia
+//
+// O Paulo, pela terceira vez no mesmo dia: *"ele aceita, diz que vai fazer,
+// depois daqui a dois minutos ele diz que ainda e pra eu fazer"*. E, nas
+// palavras do proprio Zeus para ele: *"o disparo nao esta pegando"*.
+//
+// O Zeus estava certo, e a frase dele descreve o defeito melhor que eu
+// descreveria. A ordem caia na CONVERSA em vez de virar tarefa; na conversa
+// ele responde bonito, concorda, promete — e nao existe nada do outro lado
+// para fazer. Dois minutos depois, olhando a lista de tarefas em andamento
+// (que estava vazia, e honestamente vazia), ele dizia que nao havia nada.
+//
+// A CORRECAO ANTERIOR NAO BASTA, E ISSO E O IMPORTANTE AQUI.
+// A rodada passada alargou a lista de verbos de mudanca (`VERBO_DE_MUDANCA`).
+// Isso conserta as frases que eu consegui imaginar. Mas a lista e uma aposta
+// sobre o vocabulario de OUTRA pessoa, e toda aposta dessas perde um dia: basta
+// o Paulo dizer "da um jeito naquele rodape" para a ordem sumir de novo.
+//
+// Entao aqui entra uma rede embaixo, e ela nao depende de eu adivinhar nada:
+// **se o Zeus PROMETEU, a promessa vira tarefa.** Ele mesmo — que leu a frase
+// inteira, com contexto, e entendeu que era ordem — passa a ser o segundo
+// classificador. Nao ha lista de verbos capaz de errar aqui, porque quem
+// decide nao e mais a lista: e a resposta dele.
+//
+// PROMESSA SEM TAREFA E MENTIRA. Esta e a regra, e ela vale nos dois sentidos:
+// ou o Zeus nao promete, ou o que ele prometeu comeca a acontecer de verdade.
+
+/** Verbos que, prometidos, significam MEXER no codigo. */
+const PROMETE_MEXER =
+  /(?<!\bnao )\b(vou|irei|farei|ja vou|vou ja)\b[^.!?]{0,40}\b(fazer|faze-lo|mexer|mudar|alterar|trocar|arrumar|consertar|corrigir|ajustar|colocar|botar|criar|montar|gerar|construir|acrescentar|adicionar|incluir|inserir|tirar|remover|esconder|melhorar|refazer|reescrever|resolver|implementar|aplicar|renomear|mover|organizar|atualizar|instalar|configurar|ativar|ligar|desativar|duplicar|substituir|padronizar|trabalhar|cuidar|providenciar|preparar|editar|abrir um pull request|abrir o pull request)\b/
+
+/** Promessa sem verbo: "pode deixar", "deixa comigo", "ja estou nisso". */
+const PROMETE_SOLTO =
+  /\b(pode deixar|deixa comigo|deixe comigo|ja estou nisso|ja comecei|ja comecando|estou cuidando disso|vou cuidar disso|vou dar um jeito|me encarrego|conto quando terminar|te aviso quando terminar|te conto quando terminar|vou nessa)\b/
+
+/** Verbos que, prometidos, significam so OLHAR — sem mexer em nada. */
+const PROMETE_OLHAR =
+  /(?<!\bnao )\b(vou|irei|ja vou)\b[^.!?]{0,40}\b(olhar|dar uma olhada|conferir|verificar|checar|analisar|examinar|revisar|investigar|auditar|inspecionar|ler o codigo|entender o que|descobrir|avaliar)\b/
+
+/**
+ * O Zeus prometeu alguma coisa nesta resposta?
+ *
+ * Devolve `'trabalho'`, `'analise'` ou `null`.
+ *
+ * Mexer ganha de olhar quando os dois aparecem ("vou olhar e arrumar"): quem
+ * promete arrumar prometeu a coisa maior, e entregar a maior cobre a menor.
+ */
+export function prometeuFazer(texto) {
+  const t = normalizar(texto)
+  if (!t) return null
+  if (PROMETE_MEXER.test(t) || PROMETE_SOLTO.test(t)) return 'trabalho'
+  if (PROMETE_OLHAR.test(t)) return 'analise'
+  return null
+}
+
 /**
  * Devolve o assunto vedado da frase, ou null.
  *
  * Null aqui nao quer dizer "pode tudo": quer dizer que a frase nao caiu em
  * nenhuma das portas fechadas. Quem decide o resto continua sendo a trava.
+ *
+ * `exigeVerbo: false` desliga a exigencia de verbo de mudanca. Serve para um
+ * caso so, e ele e importante: quando quem ja disse que vai MEXER foi o
+ * proprio Zeus (ver `prometeuFazer`). Ali o "verbo de mudanca" esta na
+ * resposta dele, nao na frase do Paulo — e continuar exigindo o verbo na
+ * frase do Paulo deixaria a cerca do dinheiro e do preco aberta justamente no
+ * caminho novo.
  */
-export function assuntoVedado(frase) {
+export function assuntoVedado(frase, { exigeVerbo = true } = {}) {
   const t = normalizar(frase)
   if (!t) return null
 
   // Sem verbo de mudanca e conversa, nao ordem. Conversa e livre.
-  if (!VERBO_DE_MUDANCA.test(t)) return null
+  if (exigeVerbo && !VERBO_DE_MUDANCA.test(t)) return null
 
   for (const [nome, re] of ASSUNTOS) {
     if (re.test(t)) return nome
